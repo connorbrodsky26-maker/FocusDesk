@@ -3110,7 +3110,7 @@ function bindEvents() {
     saveUserSettings({ meal_3_court: btn.dataset.court }, { silentToast: true });
   });
 
-  // Settings Custom Single-Chevron Accordions (avoids iOS Safari duplicate <details> markers)
+  // Settings Custom Single-Chevron Accordions (expands cleanly downwards, pushing sections below)
   dom.settingsView.addEventListener("click", (e) => {
     const trigger = e.target.closest("[data-accordion-target]");
     if (!trigger) return;
@@ -3120,11 +3120,6 @@ function bindEvents() {
     const willOpen = panel.hidden;
     panel.hidden = !willOpen;
     trigger.setAttribute("aria-expanded", String(willOpen));
-    if (willOpen) {
-      requestAnimationFrame(() => {
-        trigger.closest(".settings-card")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      });
-    }
   });
 
   // Day Plan Navigation & Re-flow from Now

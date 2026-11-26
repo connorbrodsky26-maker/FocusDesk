@@ -995,7 +995,7 @@ html[data-boot="app"] #auth-view {
 .fab-add-floating {
   position: fixed;
   right: max(18px, calc(50vw - 322px));
-  bottom: calc(82px + var(--safe-bottom));
+  bottom: calc(92px + var(--safe-bottom));
   width: 62px;
   height: 62px;
   border-radius: 50%;
@@ -1013,13 +1013,13 @@ html[data-boot="app"] #auth-view {
   transform: scale(0.94);
 }
 
-/* Minimal 2-Tab Bottom Navigation Bar */
+/* Bold Colorful 2-Tab Bottom Navigation Bar (Word-Only, iPhone-First) */
 .bottom-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 8px 20px calc(10px + var(--safe-bottom));
-  background: rgba(251, 249, 245, 0.94);
+  gap: 10px;
+  padding: 10px 18px calc(14px + var(--safe-bottom));
+  background: rgba(251, 249, 245, 0.96);
   border-top: 1px solid var(--border-subtle);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -1029,25 +1029,29 @@ html[data-boot="app"] #auth-view {
 
 .bottom-tab {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 6px 12px;
-  border-radius: 14px;
-  color: var(--text-tertiary);
-  font-size: 0.74rem;
-  font-weight: 700;
-  transition: background-color 140ms ease, color 140ms ease;
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: 16px;
+  background: rgba(93, 113, 191, 0.10);
+  border: 1px solid rgba(93, 113, 191, 0.20);
+  color: var(--accent);
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  transition: background-color 150ms ease, color 150ms ease, transform 120ms ease, box-shadow 150ms ease, border-color 150ms ease;
 }
 
-.bottom-tab:hover {
-  color: var(--text-primary);
+.bottom-tab:active {
+  transform: scale(0.97);
 }
 
 .bottom-tab.is-active {
-  color: var(--accent);
-  background: var(--accent-soft);
+  background: linear-gradient(135deg, #657AC8 0%, #5D71BF 55%, #4B5EAA 100%);
+  border-color: transparent;
+  color: #FFFFFF;
+  box-shadow: 0 8px 18px -6px rgba(93, 113, 191, 0.55);
 }
 
 /* ============================================================================
@@ -1667,27 +1671,27 @@ html[data-boot="app"] #auth-view {
    ============================================================================ */
 
 .settings-content {
-  flex: 1;
+  display: block;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-y;
   width: 100%;
   max-width: 600px;
   margin: 0 auto;
-  padding: 6px 20px calc(68px + var(--safe-bottom));
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  padding: 6px 20px calc(88px + var(--safe-bottom));
 }
 
 .settings-card {
-  flex-shrink: 0;
+  display: block;
+  margin-bottom: 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 4px 14px -8px rgba(22, 21, 19, 0.07);
 }
 
@@ -1698,6 +1702,7 @@ html[data-boot="app"] #auth-view {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 18px;
+  border-radius: var(--radius-lg);
   text-align: left;
   min-height: 64px;
   cursor: pointer;
@@ -1799,10 +1804,10 @@ html[data-boot="app"] #auth-view {
 }
 
 .settings-section {
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  margin-top: 8px;
 }
 
 .section-heading h3 {
