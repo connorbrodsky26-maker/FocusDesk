@@ -1,6 +1,6 @@
 /* ============================================================================
-   FocusDeck — Warm Editorial Design System
-   Zero-clutter, calm, mobile-first ADHD task & focus assistant
+   FocusDeck v2 — Warm Editorial Design System
+   Zero-clutter, calm, mobile-first ADHD task, focus & anti-fatigue day planner
    ============================================================================ */
 
 :root {
@@ -27,6 +27,21 @@
   --gold-border: #D4AF37;
   --gold-ink: #9E7914;
   --gold-icon: #C99A1E;
+
+  /* Day Plan v2 Palette */
+  --stone-bg: #EFECE6;
+  --stone-text: #6E6A63;
+  --meal-bg: #FDF3E7;
+  --meal-border: #E9C79B;
+  --meal-accent: #9A581E;
+  --sage-bg: #EAF4EE;
+  --sage-border: #C4DFCE;
+  --sage-accent: #3D6E55;
+  --personal-accent: #4F7A65;
+  --personal-bg: #EEF6F1;
+  --sleep-bg: #2B324D;
+  --sleep-text: #FBF9F5;
+  --sleep-muted: rgba(251, 249, 245, 0.72);
 
   --shadow-card:
     0 20px 44px -22px rgba(22, 21, 19, 0.13),
@@ -76,7 +91,7 @@ body {
   line-height: 1.45;
 }
 
-button, input {
+button, input, select {
   font-family: inherit;
   color: inherit;
 }
@@ -88,7 +103,8 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -259,7 +275,8 @@ html[data-boot="app"] #auth-view {
    ============================================================================ */
 
 .auth-view {
-  min-height: 100dvh;
+  height: 100%;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -314,7 +331,7 @@ html[data-boot="app"] #auth-view {
 }
 
 /* ============================================================================
-   2. MAIN APP SHELL & HEADER
+   2. MAIN APP SHELL, HEADER & 2-TAB STRUCTURE
    ============================================================================ */
 
 .app-view {
@@ -326,7 +343,6 @@ html[data-boot="app"] #auth-view {
   max-width: 680px;
   margin: 0 auto;
   padding-top: var(--safe-top);
-  padding-bottom: var(--safe-bottom);
   position: relative;
 }
 
@@ -334,8 +350,9 @@ html[data-boot="app"] #auth-view {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 10px;
+  padding: 12px 20px 6px;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -421,33 +438,43 @@ html[data-boot="app"] #auth-view {
   border-color: transparent;
 }
 
+.tab-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* ============================================================================
-   FOCUS STAGE & SINGLE QUIZLET-STYLE FOCUS CARD
+   FOCUS TAB: CONTEXT PILL, TODAY'S MEALS STRIP & SINGLE FOCUS CARD
    ============================================================================ */
 
 .focus-stage {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 10px 20px 18px;
-  gap: 18px;
+  padding: 4px 18px 8px;
+  gap: 10px;
 }
 
 .context-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 14px;
+  padding: 6px 13px;
   border-radius: var(--radius-pill);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: -0.005em;
   max-width: 100%;
+  flex-shrink: 0;
   box-shadow: 0 2px 8px -4px rgba(22, 21, 19, 0.06);
 }
 
@@ -469,26 +496,112 @@ html[data-boot="app"] #auth-view {
   background: var(--accent);
 }
 
-.focus-card-slot {
+/* Compact Today's Meals Strip */
+.meals-strip {
   width: 100%;
   max-width: 440px;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.meals-segmented {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-pill);
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.meals-seg-btn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.meals-seg-btn.is-active {
+  background: var(--accent);
+  color: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(93, 113, 191, 0.28);
+}
+
+.meals-courts-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.meal-court-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 6px 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--meal-bg);
+  border: 1px solid var(--meal-border);
+  color: var(--meal-accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.meal-chip-tag {
+  font-size: 0.68rem;
+  font-weight: 800;
+  opacity: 0.78;
+}
+
+.meal-court-chip select {
+  border: none;
+  background: transparent;
+  color: var(--meal-accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding-right: 2px;
+  cursor: pointer;
+  outline: none;
+}
+
+.focus-card-slot {
+  width: 100%;
+  max-width: 440px;
+  flex: 1;
+  min-height: 0;
+  max-height: 455px;
+  display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
 }
 
 .focus-card {
   position: relative;
   width: 100%;
-  min-height: clamp(350px, 49dvh, 460px);
+  height: 100%;
+  min-height: clamp(270px, 41dvh, 435px);
+  max-height: 450px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  padding: 28px 26px 26px;
+  padding: 24px 24px 22px;
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   will-change: transform, opacity;
 }
 
@@ -615,8 +728,8 @@ html[data-boot="app"] #auth-view {
 }
 
 .course-chip.is-personal {
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
+  background: var(--personal-bg);
+  color: var(--personal-accent);
 }
 
 .is-starred .course-chip.is-personal {
@@ -719,7 +832,7 @@ html[data-boot="app"] #auth-view {
   flex: 1;
   display: flex;
   align-items: center;
-  font-size: clamp(1.45rem, 5vw, 1.85rem);
+  font-size: clamp(1.38rem, 4.8vw, 1.8rem);
   font-weight: 700;
   line-height: 1.28;
   letter-spacing: -0.025em;
@@ -735,9 +848,9 @@ html[data-boot="app"] #auth-view {
 }
 
 .card-actions .btn {
-  min-height: 50px;
+  min-height: 48px;
   border-radius: 15px;
-  font-size: 0.96rem;
+  font-size: 0.95rem;
 }
 
 /* Break & Empty State Cards */
@@ -745,7 +858,7 @@ html[data-boot="app"] #auth-view {
   text-align: center;
   align-items: center;
   justify-content: center;
-  padding: 42px 28px 38px;
+  padding: 36px 28px 34px;
   gap: 12px;
 }
 
@@ -790,14 +903,15 @@ html[data-boot="app"] #auth-view {
 }
 
 /* ============================================================================
-   PERMANENT COMPACT UNDO / REDO BAR & FLOATING ADD BUTTON
+   PERMANENT COMPACT UNDO / REDO BAR, FLOATING ADD BUTTON & 2-TAB NAV
    ============================================================================ */
 
 .bottom-controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 20px 30px;
+  padding: 6px 20px 12px;
+  flex-shrink: 0;
 }
 
 .history-bar {
@@ -814,10 +928,10 @@ html[data-boot="app"] #auth-view {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
+  height: 32px;
   padding: 0 13px;
   border-radius: var(--radius-pill);
-  font-size: 0.8rem;
+  font-size: 0.79rem;
   font-weight: 600;
   color: var(--text-primary);
   transition: background-color 140ms ease, opacity 140ms ease, color 140ms ease;
@@ -834,14 +948,14 @@ html[data-boot="app"] #auth-view {
 
 .history-divider {
   width: 1px;
-  height: 16px;
+  height: 15px;
   background: var(--border-subtle);
 }
 
 .fab-add {
   position: fixed;
-  right: max(22px, calc(50vw - 318px));
-  bottom: calc(22px + var(--safe-bottom));
+  right: max(18px, calc(50vw - 322px));
+  bottom: calc(74px + var(--safe-bottom));
   width: 72px;
   height: 72px;
   border-radius: 50%;
@@ -852,7 +966,7 @@ html[data-boot="app"] #auth-view {
   justify-content: center;
   box-shadow: var(--shadow-fab);
   transition: background-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
-  z-index: 20;
+  z-index: 25;
 }
 
 .fab-add:hover {
@@ -862,6 +976,467 @@ html[data-boot="app"] #auth-view {
 
 .fab-add:active {
   transform: scale(0.94);
+}
+
+/* Minimal 2-Tab Bottom Navigation Bar */
+.bottom-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px 20px calc(10px + var(--safe-bottom));
+  background: rgba(251, 249, 245, 0.94);
+  border-top: 1px solid var(--border-subtle);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.bottom-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  color: var(--text-tertiary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.bottom-tab:hover {
+  color: var(--text-primary);
+}
+
+.bottom-tab.is-active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ============================================================================
+   DAY PLAN TAB (CALM ANTI-FATIGUE SINGLE-DAY VERTICAL TIMELINE)
+   ============================================================================ */
+
+.tab-panel-plan {
+  padding: 0 18px;
+}
+
+.plan-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0 10px;
+  flex-shrink: 0;
+}
+
+.day-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+}
+
+.day-nav-arrow {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.day-nav-arrow:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.day-nav-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.day-nav-label {
+  padding: 0 10px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.day-nav-label:hover {
+  background: var(--bg-subtle);
+}
+
+.reflow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background-color 140ms ease, transform 120ms ease;
+}
+
+.reflow-btn:hover {
+  background: rgba(93, 113, 191, 0.18);
+}
+
+.reflow-btn:active {
+  transform: scale(0.97);
+}
+
+/* Sleep Flex & Overload Banners */
+.plan-banner {
+  margin-bottom: 10px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  line-height: 1.45;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.plan-banner.is-amber {
+  background: #FDF3E3;
+  border: 1px solid #EBD0A4;
+  color: #8C5613;
+}
+
+.plan-banner.is-overload {
+  background: #FCEEEE;
+  border: 1px solid #E9BBBB;
+  color: #A12D2D;
+}
+
+.plan-banner-btn {
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.78);
+  color: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Scrollable Timeline Region */
+.plan-timeline-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 2px 2px 96px;
+  scrollbar-width: thin;
+}
+
+.plan-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plan-wake-marker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 2px;
+  font-size: 0.79rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.plan-wake-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.plan-card {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: 18px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.plan-card.is-past {
+  opacity: 0.56;
+}
+
+.plan-card-time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  padding-top: 2px;
+}
+
+.plan-card-end {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
+.plan-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.plan-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plan-card-title {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.plan-card-meta {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.plan-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.69rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Color-Coded Day Plan Cards */
+/* 1. Classes + Walk Buffers (Warm Stone) */
+.plan-card-class {
+  background: var(--stone-bg);
+  border-color: #E2DDD4;
+  color: var(--stone-text);
+}
+.plan-card-class .plan-card-title {
+  color: #4D4943;
+}
+.plan-card-class .plan-tag {
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--stone-text);
+}
+
+/* 2. Meals (Soft Warm Amber) */
+.plan-card-meal {
+  background: var(--meal-bg);
+  border-color: var(--meal-border);
+}
+.plan-card-meal .plan-card-time,
+.plan-card-meal .plan-card-title {
+  color: var(--meal-accent);
+}
+.plan-card-meal .plan-card-meta {
+  color: #825329;
+}
+.plan-card-meal .plan-tag {
+  background: rgba(154, 88, 30, 0.12);
+  color: var(--meal-accent);
+}
+
+/* 3. Runs & Showers (Calm Sage Green) */
+.plan-card-run,
+.plan-card-shower {
+  background: var(--sage-bg);
+  border-color: var(--sage-border);
+}
+.plan-card-run .plan-card-time,
+.plan-card-run .plan-card-title,
+.plan-card-shower .plan-card-time,
+.plan-card-shower .plan-card-title {
+  color: var(--sage-accent);
+}
+.plan-card-run .plan-card-meta,
+.plan-card-shower .plan-card-meta {
+  color: #466957;
+}
+.plan-move-run-btn {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: #FFFFFF;
+  border: 1px solid var(--sage-border);
+  color: var(--sage-accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.plan-move-run-btn:hover {
+  background: #DCEEE3;
+}
+
+/* 4. Academic Tasks (Signature #5D71BF Blue) */
+.plan-card-academic {
+  background: #FFFFFF;
+  border-color: rgba(93, 113, 191, 0.28);
+  border-left: 4px solid var(--accent);
+  cursor: pointer;
+}
+.plan-card-academic .plan-card-time {
+  color: var(--accent);
+}
+.plan-card-academic .plan-tag {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* 5. Personal Tasks (Sage Green Accent #4F7A65) */
+.plan-card-personal {
+  background: var(--personal-bg);
+  border-color: rgba(79, 122, 101, 0.28);
+  border-left: 4px solid var(--personal-accent);
+  cursor: pointer;
+}
+.plan-card-personal .plan-card-time {
+  color: var(--personal-accent);
+}
+.plan-card-personal .plan-tag {
+  background: rgba(79, 122, 101, 0.14);
+  color: var(--personal-accent);
+}
+
+/* Starred task subtle gold border accent on Day Plan */
+.plan-card.is-starred-plan {
+  border-color: var(--gold-border);
+  background: linear-gradient(145deg, #FFFDF7 0%, #FFF6DC 100%);
+}
+
+/* 6. Sleep Anchor (Deep Twilight Indigo) */
+.plan-card-sleep {
+  background: var(--sleep-bg);
+  border-color: #232940;
+  color: var(--sleep-text);
+}
+.plan-card-sleep .plan-card-time,
+.plan-card-sleep .plan-card-title {
+  color: var(--sleep-text);
+}
+.plan-card-sleep .plan-card-meta {
+  color: var(--sleep-muted);
+}
+.plan-card-sleep .plan-tag {
+  background: rgba(251, 249, 245, 0.16);
+  color: var(--sleep-text);
+}
+
+/* Breathing Gap subtle divider */
+.plan-gap-pill {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-left: 88px;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: transparent;
+}
+
+/* Overflow Section on Day Plan (Protect Your Sleep highlight) */
+.plan-overflow-section {
+  margin-top: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  background: #FCEEEE;
+  border: 1.5px solid #E5A9A9;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plan-overflow-section.is-highlighted {
+  box-shadow: 0 0 0 3px rgba(197, 58, 58, 0.22);
+}
+
+.plan-overflow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plan-overflow-header h4 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: #9C2929;
+}
+
+.plan-overflow-item {
+  background: #FFFFFF;
+  border: 1px solid #EBCACA;
+  border-radius: 13px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plan-overflow-info {
+  min-width: 0;
+}
+
+.plan-overflow-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.plan-overflow-meta {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.plan-overflow-defer-btn {
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 /* ============================================================================
@@ -893,6 +1468,7 @@ html[data-boot="app"] #auth-view {
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
+  flex-shrink: 0;
 }
 
 .overlay-header-left {
@@ -1061,7 +1637,7 @@ html[data-boot="app"] #auth-view {
 }
 
 /* ============================================================================
-   SETTINGS VIEW
+   SETTINGS VIEW (COLLAPSIBLE ACCORDIONS)
    ============================================================================ */
 
 .settings-content {
@@ -1072,10 +1648,117 @@ html[data-boot="app"] #auth-view {
   width: 100%;
   max-width: 600px;
   margin: 0 auto;
-  padding: 6px 20px 44px;
+  padding: 6px 20px 48px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 14px;
+}
+
+.settings-accordion {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 4px 14px -8px rgba(22, 21, 19, 0.07);
+}
+
+.settings-accordion-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-accordion-summary h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.settings-accordion-summary p {
+  margin: 3px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.accordion-chevron {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: transform 180ms ease;
+}
+
+.settings-accordion[open] .accordion-chevron {
+  transform: rotate(180deg);
+}
+
+.settings-accordion-body {
+  padding: 0 18px 18px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+}
+
+.settings-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ics-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ics-box input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.settings-help-note {
+  margin: 10px 0 0;
+  font-size: 0.81rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.settings-help-note.is-muted {
+  color: var(--text-tertiary);
+  font-size: 0.77rem;
+}
+
+.window-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.window-block:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.window-block-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .settings-section {
@@ -1113,10 +1796,10 @@ html[data-boot="app"] #auth-view {
 }
 
 .pillar-item {
-  background: var(--bg-surface);
+  background: var(--bg-canvas);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 13px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1131,13 +1814,13 @@ html[data-boot="app"] #auth-view {
 }
 
 .pillar-item-name {
-  font-size: 0.96rem;
+  font-size: 0.94rem;
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .pillar-item-meta {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -1150,14 +1833,13 @@ html[data-boot="app"] #auth-view {
 }
 
 .pillar-form-card {
-  background: var(--bg-surface);
+  background: var(--bg-canvas);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: 20px;
+  border-radius: var(--radius-md);
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  box-shadow: var(--shadow-soft);
+  gap: 14px;
 }
 
 .pillar-form-header {
@@ -1168,7 +1850,7 @@ html[data-boot="app"] #auth-view {
 
 .pillar-form-header h4 {
   margin: 0;
-  font-size: 0.96rem;
+  font-size: 0.94rem;
   font-weight: 700;
 }
 
@@ -1178,13 +1860,18 @@ html[data-boot="app"] #auth-view {
   gap: 8px;
 }
 
+.day-pills-7 {
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
 .day-pill {
   height: 40px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
-  background: var(--bg-canvas);
+  background: var(--bg-surface);
   color: var(--text-secondary);
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   font-weight: 700;
   transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
 }
@@ -1196,7 +1883,8 @@ html[data-boot="app"] #auth-view {
 }
 
 .settings-account {
-  padding-top: 12px;
+  padding-top: 14px;
+  margin-top: 4px;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -1212,7 +1900,7 @@ html[data-boot="app"] #auth-view {
 }
 
 /* ============================================================================
-   MODALS (3-TAP QUICK ADD / EDIT & LATE WARNING)
+   MODALS (3-TAP QUICK ADD/EDIT, LATE WARNING, SLEEP ALERT, MOVE RUN)
    ============================================================================ */
 
 .modal-backdrop {
@@ -1403,7 +2091,7 @@ html[data-boot="app"] #auth-view {
   width: auto !important;
   min-height: 36px !important;
   padding: 4px 10px !important;
-  font-size: 0.86rem !important;
+  font-size: 16px !important;
 }
 
 .duration-controls {
@@ -1417,7 +2105,7 @@ html[data-boot="app"] #auth-view {
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 82px;
+  width: 86px;
 }
 
 .custom-min-wrap input {
@@ -1426,7 +2114,7 @@ html[data-boot="app"] #auth-view {
   height: 36px;
   padding: 0 24px 0 10px !important;
   border-radius: var(--radius-pill) !important;
-  font-size: 0.84rem !important;
+  font-size: 16px !important;
 }
 
 .custom-min-unit {
@@ -1509,10 +2197,10 @@ html[data-boot="app"] #auth-view {
   flex: 1;
 }
 
-/* Late Warning Confirmation Modal */
+/* Confirmation / Alert / Move Run Cards */
 .confirm-card {
   width: 100%;
-  max-width: 370px;
+  max-width: 380px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 24px;
@@ -1538,6 +2226,11 @@ html[data-boot="app"] #auth-view {
   margin-bottom: 2px;
 }
 
+.sleep-alert-icon {
+  background: var(--sleep-bg);
+  color: var(--sleep-text);
+}
+
 .confirm-card h3 {
   margin: 0;
   font-size: 1.12rem;
@@ -1547,7 +2240,7 @@ html[data-boot="app"] #auth-view {
 
 .confirm-message {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.91rem;
   color: var(--text-secondary);
   line-height: 1.5;
 }
@@ -1560,6 +2253,47 @@ html[data-boot="app"] #auth-view {
   margin-top: 10px;
 }
 
+.confirm-actions-stack {
+  grid-template-columns: 1fr;
+}
+
+.move-run-days-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 6px;
+  max-height: 48dvh;
+  overflow-y: auto;
+}
+
+.move-run-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-radius: 13px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.move-run-option:hover {
+  background: var(--sage-bg);
+  border-color: var(--sage-border);
+  color: var(--sage-accent);
+}
+
+.move-run-option small {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 /* ============================================================================
    TOAST NOTIFICATION
    ============================================================================ */
@@ -1567,7 +2301,7 @@ html[data-boot="app"] #auth-view {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(90px + var(--safe-bottom));
+  bottom: calc(92px + var(--safe-bottom));
   transform: translateX(-50%);
   z-index: 80;
   background: var(--text-primary);

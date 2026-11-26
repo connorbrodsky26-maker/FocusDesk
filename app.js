@@ -1,9 +1,10 @@
 // ============================================================================
-// SUPABASE CONFIGURATION
-// Paste your Supabase project URL and publishable key below.
+// SUPABASE & EDGE FUNCTION CONFIGURATION
+// Paste your Supabase project URL, publishable key, and Edge Function URL below.
 // ============================================================================
 const SUPABASE_URL = "https://cqxmccjeyhrsepyptjaz.supabase.co/rest/v1/";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_0v85eYnFjEypiz6x-CjUww_gewKB9bd";
+const EDGE_FUNCTION_URL = "https://cqxmccjeyhrsepyptjaz.supabase.co/functions/v1/super-responder";
 
 // Normalize URL if the /rest/v1/ suffix is present (supabase-js appends /rest/v1 & /auth/v1 automatically)
 const SUPABASE_BASE_URL = SUPABASE_URL.replace(/\/rest\/v1\/?$/i, "").replace(/\/+$/, "");
@@ -25,12 +26,22 @@ const supabase = createClient(SUPABASE_BASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 const STORAGE_KEYS = {
   TASKS: "focusdeck_tasks_v1",
   PILLARS: "focusdeck_pillars_v1",
+  USER_SETTINGS: "focusdeck_user_settings_v2",
+  DINING_PREFIX: "focusdeck_dining_v2_",
   USER_EMAIL: "focusdeck_user_email",
   USER_ID: "focusdeck_user_id"
 };
 
 const COURSE_PRESETS = ["MA 26100", "CHM 11510", "ENGR 13100", "SLCA 10100", "Personal"];
-const DAY_LABELS = { 1: "M", 2: "T", 3: "W", 4: "Th", 5: "F", 6: "Sa", 0: "Su" };
+const DINING_COURTS = ["Wiley", "Ford", "Earhart", "Windsor", "Hillenbrand", "Off-Campus"];
+const DAY_LABELS = { 0: "Su", 1: "M", 2: "T", 3: "W", 4: "Th", 5: "F", 6: "Sa" };
+const DAY_SHORT_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const DEFAULT_FALLBACK_DINING_INTERVALS = [
+  { start: 420, end: 600, label: "Breakfast" },
+  { start: 660, end: 840, label: "Lunch" },
+  { start: 1020, end: 1200, label: "Dinner" }
+];
 
 // ============================================================================
 // APPLICATION STATE
@@ -39,11 +50,26 @@ const state = {
   user: null,
   tasks: [],
   pillars: [],
+  userSettings: null,
+  diningCache: {}, // { "YYYY-MM-DD": { courts: { Wiley: [{start,end,label}] }, isFallback: boolean, fetchedAt: number } }
+  diningFetching: new Set(),
+
+  activeTab: "focus", // "focus" | "plan"
+  planDayOffset: 0, // -1 (Yesterday) .. +6
+  reflowAnchorDateKey: null,
+  reflowAnchorMin: null,
+  latestSevenDayPlan: null,
+  highlightOverflow: false,
+  dismissedOverloadSig: null,
+  moveRunSourceOffset: null,
+
   undoStack: [],
   redoStack: [],
   bypassBreakGapKey: null,
   syncStatus: "synced", // "synced" | "syncing" | "offline" | "error"
   pendingWrites: 0,
+  plannedSyncTimer: null,
+  plannedSyncVersion: 0,
   isAnimatingCard: false,
   editingTaskId: null,
   deleteConfirmArmed: false,
@@ -71,13 +97,33 @@ const dom = {
   allTasksCount: document.getElementById("all-tasks-count"),
   btnSettings: document.getElementById("btn-settings"),
 
+  // Tabs
+  tabFocusPanel: document.getElementById("tab-focus-panel"),
+  tabPlanPanel: document.getElementById("tab-plan-panel"),
+  tabBtnFocus: document.getElementById("tab-btn-focus"),
+  tabBtnPlan: document.getElementById("tab-btn-plan"),
+
+  // Focus Tab
   contextPill: document.getElementById("context-pill"),
   contextPillText: document.getElementById("context-pill-text"),
+  mealsStrip: document.getElementById("meals-strip"),
+  selectMeal1Court: document.getElementById("select-meal-1-court"),
+  selectMeal2Court: document.getElementById("select-meal-2-court"),
+  selectMeal3Court: document.getElementById("select-meal-3-court"),
+  meal3ChipWrap: document.getElementById("meal-3-chip-wrap"),
   focusCardSlot: document.getElementById("focus-card-slot"),
-
   btnUndo: document.getElementById("btn-undo"),
   btnRedo: document.getElementById("btn-redo"),
   btnAddFab: document.getElementById("btn-add-fab"),
+
+  // Day Plan Tab
+  btnPlanPrev: document.getElementById("btn-plan-prev"),
+  btnPlanDayLabel: document.getElementById("btn-plan-day-label"),
+  btnPlanNext: document.getElementById("btn-plan-next"),
+  btnReflowNow: document.getElementById("btn-reflow-now"),
+  planSleepBanner: document.getElementById("plan-sleep-banner"),
+  planTimelineScroll: document.getElementById("plan-timeline-scroll"),
+  planTimelineList: document.getElementById("plan-timeline-list"),
 
   // Carousel Overlay
   carouselView: document.getElementById("carousel-view"),
@@ -92,6 +138,24 @@ const dom = {
   // Settings Overlay
   settingsView: document.getElementById("settings-view"),
   btnSettingsClose: document.getElementById("btn-settings-close"),
+  settingsIcsUrl: document.getElementById("settings-ics-url"),
+  btnCopyIcs: document.getElementById("btn-copy-ics"),
+  mealsSettingsForm: document.getElementById("meals-settings-form"),
+  setMeal1Start: document.getElementById("set-meal1-start"),
+  setMeal1End: document.getElementById("set-meal1-end"),
+  setMeal2Start: document.getElementById("set-meal2-start"),
+  setMeal2End: document.getElementById("set-meal2-end"),
+  setMeal3Start: document.getElementById("set-meal3-start"),
+  setMeal3End: document.getElementById("set-meal3-end"),
+  wellnessSettingsForm: document.getElementById("wellness-settings-form"),
+  setPrefSleep: document.getElementById("set-pref-sleep"),
+  setMinSleep: document.getElementById("set-min-sleep"),
+  setEveningShower: document.getElementById("set-evening-shower"),
+  setNoClassWake: document.getElementById("set-noclass-wake"),
+  setRunsPerWeek: document.getElementById("set-runs-per-week"),
+  settingsRunDays: document.getElementById("settings-run-days"),
+  wellnessFormError: document.getElementById("wellness-form-error"),
+
   pillarsList: document.getElementById("pillars-list"),
   pillarForm: document.getElementById("pillar-form"),
   pillarFormTitle: document.getElementById("pillar-form-title"),
@@ -134,6 +198,17 @@ const dom = {
   btnLateCancel: document.getElementById("btn-late-cancel"),
   btnLateProceed: document.getElementById("btn-late-proceed"),
 
+  // Protect Your Sleep Alert Modal
+  sleepAlertModal: document.getElementById("sleep-alert-modal"),
+  sleepAlertMessage: document.getElementById("sleep-alert-message"),
+  btnSleepViewOverflow: document.getElementById("btn-sleep-view-overflow"),
+  btnSleepGotIt: document.getElementById("btn-sleep-got-it"),
+
+  // Move Run Modal
+  moveRunModal: document.getElementById("move-run-modal"),
+  moveRunDaysList: document.getElementById("move-run-days-list"),
+  btnMoveRunCancel: document.getElementById("btn-move-run-cancel"),
+
   toast: document.getElementById("toast")
 };
 
@@ -168,24 +243,52 @@ function toLocalDateKey(date) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
-function parseLocalDateKey(key) {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
+function addLocalDays(date, offsetDays) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + offsetDays, 0, 0, 0, 0);
 }
 
 function parseHHMM(str) {
+  if (typeof str === "number" && Number.isFinite(str)) return str;
   if (!str || typeof str !== "string") return 0;
-  const [h, m] = str.split(":").map(Number);
-  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+  const trimmed = str.trim();
+
+  // Support "11:30 AM" / "2:15 PM"
+  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (ampmMatch) {
+    let h = parseInt(ampmMatch[1], 10);
+    const m = parseInt(ampmMatch[2], 10);
+    const meridiem = ampmMatch[3].toUpperCase();
+    if (meridiem === "PM" && h < 12) h += 12;
+    if (meridiem === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  // Support ISO timestamps like "2026-11-26T11:30:00"
+  if (trimmed.includes("T")) {
+    const dt = new Date(trimmed);
+    if (!Number.isNaN(dt.getTime())) {
+      return dt.getHours() * 60 + dt.getMinutes();
+    }
+  }
+
+  // Standard "HH:MM" or "HH:MM:SS"
+  const parts = trimmed.split(":").map(Number);
+  const h = Number.isFinite(parts[0]) ? parts[0] : 0;
+  const m = Number.isFinite(parts[1]) ? parts[1] : 0;
+  return h * 60 + m;
 }
 
-function formatHHMM12h(hhmm) {
-  const total = parseHHMM(hhmm);
-  const h24 = Math.floor(total / 60);
-  const mins = total % 60;
+function formatMinuteOfDay(totalMinutes) {
+  const normalized = ((Math.round(totalMinutes) % 1440) + 1440) % 1440;
+  const h24 = Math.floor(normalized / 60);
+  const mins = normalized % 60;
   const suffix = h24 >= 12 ? "PM" : "AM";
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   return `${h12}:${pad2(mins)} ${suffix}`;
+}
+
+function formatHHMM12h(hhmm) {
+  return formatMinuteOfDay(parseHHMM(hhmm));
 }
 
 function formatDuration(minutes) {
@@ -194,6 +297,30 @@ function formatDuration(minutes) {
   const hrs = Math.floor(m / 60);
   const rem = m % 60;
   return rem === 0 ? `${hrs}h` : `${hrs}h ${rem}m`;
+}
+
+function formatSleepHoursLabel(hours) {
+  const rounded = Math.round(hours * 10) / 10;
+  return `${rounded.toFixed(1)}h`;
+}
+
+function formatHoursAndMins(totalMinutes) {
+  const m = Math.max(0, Math.round(totalMinutes));
+  const hrs = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem === 0 ? `${hrs}h` : `${hrs}h ${rem}m`;
+}
+
+function dateFromDayAndMinute(dayDate, minuteOfDay) {
+  return new Date(
+    dayDate.getFullYear(),
+    dayDate.getMonth(),
+    dayDate.getDate(),
+    0,
+    Math.round(minuteOfDay),
+    0,
+    0
+  );
 }
 
 function isTaskOverdue(task, now = new Date()) {
@@ -214,24 +341,16 @@ function formatDueLabel(dueIso, now = new Date()) {
   if (Number.isNaN(due.getTime())) return "No due date";
 
   const todayKey = toLocalDateKey(now);
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const tomorrowKey = toLocalDateKey(tomorrow);
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const yesterdayKey = toLocalDateKey(yesterday);
+  const tomorrowKey = toLocalDateKey(addLocalDays(now, 1));
+  const yesterdayKey = toLocalDateKey(addLocalDays(now, -1));
   const dueKey = toLocalDateKey(due);
 
   const isDefaultEndOfDay = due.getHours() === 23 && due.getMinutes() === 59;
   const timeStr = formatTime12hFromDate(due);
 
-  if (dueKey === todayKey) {
-    return `Due Today ${timeStr}`;
-  }
-  if (dueKey === tomorrowKey) {
-    return isDefaultEndOfDay ? "Due Tomorrow" : `Due Tomorrow ${timeStr}`;
-  }
-  if (dueKey === yesterdayKey) {
-    return isDefaultEndOfDay ? "Due Yesterday" : `Due Yesterday ${timeStr}`;
-  }
+  if (dueKey === todayKey) return `Due Today ${timeStr}`;
+  if (dueKey === tomorrowKey) return isDefaultEndOfDay ? "Due Tomorrow" : `Due Tomorrow ${timeStr}`;
+  if (dueKey === yesterdayKey) return isDefaultEndOfDay ? "Due Yesterday" : `Due Yesterday ${timeStr}`;
 
   const sameYear = due.getFullYear() === now.getFullYear();
   const datePart = due.toLocaleDateString(undefined, {
@@ -248,8 +367,7 @@ function formatLateWarningDue(dueIso, now = new Date()) {
   const due = new Date(dueIso);
   if (Number.isNaN(due.getTime())) return "soon";
   const todayKey = toLocalDateKey(now);
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const tomorrowKey = toLocalDateKey(tomorrow);
+  const tomorrowKey = toLocalDateKey(addLocalDays(now, 1));
   const dueKey = toLocalDateKey(due);
   const timeStr = formatTime12hFromDate(due);
 
@@ -289,22 +407,138 @@ function showToast(message, durationMs = 2600) {
 }
 
 // ============================================================================
+// USER SETTINGS & NORMALIZATION
+// ============================================================================
+function createDefaultUserSettings(userId = null) {
+  return {
+    user_id: userId,
+    ics_token: generateUUID(),
+    meals_per_day: 2,
+    meal_1_court: "Wiley",
+    meal_2_court: "Ford",
+    meal_3_court: "Earhart",
+    meal_1_window_start: "10:30",
+    meal_1_window_end: "14:30",
+    meal_2_window_start: "16:30",
+    meal_2_window_end: "20:30",
+    meal_3_window_start: "19:30",
+    meal_3_window_end: "22:00",
+    preferred_sleep_hours: 8.0,
+    min_sleep_hours: 7.0,
+    evening_shower_minutes: 40,
+    no_class_wake_time: "08:30",
+    runs_per_week: 2,
+    preferred_run_days: [3, 6]
+  };
+}
+
+function normalizeUserSettings(row, userId = null) {
+  const defaults = createDefaultUserSettings(userId);
+  const src = row || {};
+  const validCourt = (val, fallback) => (DINING_COURTS.includes(val) ? val : fallback);
+  const prefSleep = Number.isFinite(Number(src.preferred_sleep_hours))
+    ? Math.max(5, Math.min(12, Number(src.preferred_sleep_hours)))
+    : defaults.preferred_sleep_hours;
+  const minSleep = Number.isFinite(Number(src.min_sleep_hours))
+    ? Math.max(4, Math.min(prefSleep, Number(src.min_sleep_hours)))
+    : Math.min(prefSleep, defaults.min_sleep_hours);
+
+  return {
+    user_id: src.user_id || userId || defaults.user_id,
+    ics_token: src.ics_token || defaults.ics_token,
+    meals_per_day: Number(src.meals_per_day) === 3 ? 3 : 2,
+    meal_1_court: validCourt(src.meal_1_court, defaults.meal_1_court),
+    meal_2_court: validCourt(src.meal_2_court, defaults.meal_2_court),
+    meal_3_court: validCourt(src.meal_3_court, defaults.meal_3_court),
+    meal_1_window_start: src.meal_1_window_start || defaults.meal_1_window_start,
+    meal_1_window_end: src.meal_1_window_end || defaults.meal_1_window_end,
+    meal_2_window_start: src.meal_2_window_start || defaults.meal_2_window_start,
+    meal_2_window_end: src.meal_2_window_end || defaults.meal_2_window_end,
+    meal_3_window_start: src.meal_3_window_start || defaults.meal_3_window_start,
+    meal_3_window_end: src.meal_3_window_end || defaults.meal_3_window_end,
+    preferred_sleep_hours: prefSleep,
+    min_sleep_hours: minSleep,
+    evening_shower_minutes: Number.isFinite(Number(src.evening_shower_minutes))
+      ? Math.max(0, Math.min(120, Math.round(Number(src.evening_shower_minutes))))
+      : defaults.evening_shower_minutes,
+    no_class_wake_time: src.no_class_wake_time || defaults.no_class_wake_time,
+    runs_per_week: Number.isFinite(Number(src.runs_per_week))
+      ? Math.max(0, Math.min(7, Math.round(Number(src.runs_per_week))))
+      : defaults.runs_per_week,
+    preferred_run_days: Array.isArray(src.preferred_run_days)
+      ? [...new Set(src.preferred_run_days.map(Number).filter((d) => d >= 0 && d <= 6))].sort((a, b) => a - b)
+      : defaults.preferred_run_days
+  };
+}
+
+function getSettings() {
+  if (!state.userSettings) {
+    state.userSettings = createDefaultUserSettings(state.user?.id || null);
+  }
+  return state.userSettings;
+}
+
+function normalizeTask(row) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    title: row.title || "",
+    course: row.course || "Personal",
+    due_at: row.due_at || new Date().toISOString(),
+    duration_minutes: Math.max(1, Number(row.duration_minutes) || 30),
+    all_at_once: Boolean(row.all_at_once),
+    is_starred: Boolean(row.is_starred),
+    status: row.status === "completed" ? "completed" : "active",
+    sort_order: Number(row.sort_order) || 0,
+    created_at: row.created_at || new Date().toISOString()
+  };
+}
+
+function normalizePillar(row) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    name: row.name || "",
+    days_of_week: Array.isArray(row.days_of_week) ? row.days_of_week.map(Number).sort((a, b) => a - b) : [],
+    start_time: row.start_time || "09:00",
+    end_time: row.end_time || "10:00",
+    walk_buffer_minutes: Number.isFinite(Number(row.walk_buffer_minutes)) ? Number(row.walk_buffer_minutes) : 15,
+    created_at: row.created_at || new Date().toISOString()
+  };
+}
+
+// ============================================================================
 // LOCAL CACHE PERSISTENCE
 // ============================================================================
 function loadCacheFromStorage() {
   try {
     const rawTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
     const rawPillars = localStorage.getItem(STORAGE_KEYS.PILLARS);
-    state.tasks = rawTasks ? JSON.parse(rawTasks) : [];
-    state.pillars = rawPillars ? JSON.parse(rawPillars) : [];
+    const rawSettings = localStorage.getItem(STORAGE_KEYS.USER_SETTINGS);
+    state.tasks = rawTasks ? JSON.parse(rawTasks).map(normalizeTask) : [];
+    state.pillars = rawPillars ? JSON.parse(rawPillars).map(normalizePillar) : [];
+
     const cachedEmail = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
     const cachedId = localStorage.getItem(STORAGE_KEYS.USER_ID);
     if (cachedEmail && cachedId) {
       state.user = { id: cachedId, email: cachedEmail };
     }
+
+    state.userSettings = normalizeUserSettings(rawSettings ? JSON.parse(rawSettings) : null, state.user?.id || null);
+
+    // Hydrate cached dining hours for today & upcoming days
+    const now = new Date();
+    for (let offset = -1; offset <= 6; offset++) {
+      const key = toLocalDateKey(addLocalDays(now, offset));
+      const rawDining = localStorage.getItem(STORAGE_KEYS.DINING_PREFIX + key);
+      if (rawDining) {
+        state.diningCache[key] = JSON.parse(rawDining);
+      }
+    }
   } catch (_) {
     state.tasks = [];
     state.pillars = [];
+    state.userSettings = createDefaultUserSettings(state.user?.id || null);
   }
 }
 
@@ -317,6 +551,19 @@ function saveTasksToCache() {
 function savePillarsToCache() {
   try {
     localStorage.setItem(STORAGE_KEYS.PILLARS, JSON.stringify(state.pillars));
+  } catch (_) {}
+}
+
+function saveUserSettingsToCache() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.USER_SETTINGS, JSON.stringify(getSettings()));
+  } catch (_) {}
+}
+
+function saveDiningToCache(dateKey, entry) {
+  state.diningCache[dateKey] = entry;
+  try {
+    localStorage.setItem(STORAGE_KEYS.DINING_PREFIX + dateKey, JSON.stringify(entry));
   } catch (_) {}
 }
 
@@ -336,13 +583,160 @@ function clearAllCache() {
   try {
     localStorage.removeItem(STORAGE_KEYS.TASKS);
     localStorage.removeItem(STORAGE_KEYS.PILLARS);
+    localStorage.removeItem(STORAGE_KEYS.USER_SETTINGS);
     localStorage.removeItem(STORAGE_KEYS.USER_EMAIL);
     localStorage.removeItem(STORAGE_KEYS.USER_ID);
   } catch (_) {}
 }
 
 // ============================================================================
-// SYNC STATUS INDICATOR
+// PURDUE DINING COURT LIVE HOURS (EDGE FUNCTION + CACHE)
+// ============================================================================
+function matchDiningCourtName(rawName) {
+  if (!rawName) return null;
+  const lower = String(rawName).toLowerCase();
+  for (const court of DINING_COURTS) {
+    if (court === "Off-Campus") continue;
+    if (lower.includes(court.toLowerCase())) return court;
+  }
+  return null;
+}
+
+function extractIntervalsFromCourtNode(node) {
+  const intervals = [];
+  if (!node) return intervals;
+
+  const pushInterval = (startRaw, endRaw, label = "") => {
+    if (startRaw == null || endRaw == null) return;
+    const start = parseHHMM(startRaw);
+    const end = parseHHMM(endRaw);
+    if (end > start && start >= 0 && end <= 1440) {
+      intervals.push({ start, end, label: label || "Open" });
+    }
+  };
+
+  // Array of meals / interval objects
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      if (!item || typeof item !== "object") continue;
+      if (item.Status && String(item.Status).toLowerCase() === "closed") continue;
+      if (item.status && String(item.status).toLowerCase() === "closed") continue;
+      if (item.is_open === false || item.open === false) continue;
+
+      if (item.Hours && typeof item.Hours === "object") {
+        pushInterval(item.Hours.StartTime || item.Hours.start_time || item.Hours.start, item.Hours.EndTime || item.Hours.end_time || item.Hours.end, item.Name || item.name);
+      } else if (item.hours && typeof item.hours === "object" && !Array.isArray(item.hours)) {
+        pushInterval(item.hours.StartTime || item.hours.start_time || item.hours.start, item.hours.EndTime || item.hours.end_time || item.hours.end, item.Name || item.name);
+      } else {
+        pushInterval(
+          item.start ?? item.start_time ?? item.StartTime ?? item.open ?? item.open_time,
+          item.end ?? item.end_time ?? item.EndTime ?? item.close ?? item.close_time,
+          item.name ?? item.Name ?? item.meal ?? item.label
+        );
+      }
+    }
+  } else if (typeof node === "object") {
+    if (Array.isArray(node.Meals)) return extractIntervalsFromCourtNode(node.Meals);
+    if (Array.isArray(node.meals)) return extractIntervalsFromCourtNode(node.meals);
+    if (Array.isArray(node.hours)) return extractIntervalsFromCourtNode(node.hours);
+    if (Array.isArray(node.intervals)) return extractIntervalsFromCourtNode(node.intervals);
+    if (Array.isArray(node.windows)) return extractIntervalsFromCourtNode(node.windows);
+    pushInterval(
+      node.start ?? node.start_time ?? node.StartTime ?? node.open,
+      node.end ?? node.end_time ?? node.EndTime ?? node.close,
+      node.name || "Open"
+    );
+  }
+
+  intervals.sort((a, b) => a.start - b.start);
+  return intervals;
+}
+
+function normalizeDiningPayload(payload) {
+  const courts = {};
+  if (!payload) return { courts, isFallback: true };
+
+  // Unwrap wrapper keys if present
+  const root = payload.courts || payload.locations || payload.Location || payload.dining || payload.data || payload;
+
+  if (Array.isArray(root)) {
+    for (const loc of root) {
+      const courtName = matchDiningCourtName(loc?.Name || loc?.name || loc?.court || loc?.location || loc?.id);
+      if (!courtName) continue;
+      courts[courtName] = extractIntervalsFromCourtNode(loc);
+    }
+  } else if (root && typeof root === "object") {
+    for (const [k, v] of Object.entries(root)) {
+      const courtName = matchDiningCourtName(k);
+      if (!courtName) continue;
+      courts[courtName] = extractIntervalsFromCourtNode(v);
+    }
+  }
+
+  const hasAnyCourt = Object.keys(courts).length > 0;
+  return { courts, isFallback: !hasAnyCourt };
+}
+
+function getCourtOpenIntervals(court, dateKey) {
+  if (court === "Off-Campus") {
+    return {
+      intervals: [{ start: 0, end: 1440, label: "Off-Campus" }],
+      isLive: true,
+      isOffCampus: true
+    };
+  }
+
+  const cached = state.diningCache[dateKey];
+  if (cached && cached.courts && Object.prototype.hasOwnProperty.call(cached.courts, court)) {
+    return {
+      intervals: cached.courts[court] || [],
+      isLive: !cached.isFallback,
+      isOffCampus: false
+    };
+  }
+
+  return {
+    intervals: DEFAULT_FALLBACK_DINING_INTERVALS,
+    isLive: false,
+    isOffCampus: false
+  };
+}
+
+async function fetchDiningHoursForDate(dateKey, forceRefresh = false) {
+  const cached = state.diningCache[dateKey];
+  const SIX_HOURS = 6 * 60 * 60 * 1000;
+  if (!forceRefresh && cached && !cached.isFallback && Date.now() - (cached.fetchedAt || 0) < SIX_HOURS) {
+    return cached;
+  }
+  if (state.diningFetching.has(dateKey) || !navigator.onLine) return cached || null;
+
+  state.diningFetching.add(dateKey);
+  try {
+    const url = `${EDGE_FUNCTION_URL}?action=dining&date=${encodeURIComponent(dateKey)}`;
+    const res = await fetch(url, { method: "GET" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    const normalized = normalizeDiningPayload(payload);
+    const entry = {
+      courts: normalized.courts,
+      isFallback: normalized.isFallback,
+      fetchedAt: Date.now()
+    };
+    saveDiningToCache(dateKey, entry);
+
+    // Recalculate plan & refresh Day Plan if visible
+    recomputePlanAndRender({ scheduleSync: true });
+    return entry;
+  } catch (err) {
+    console.warn(`Purdue Dining hours fetch fallback for ${dateKey}:`, err);
+    return cached || null;
+  } finally {
+    state.diningFetching.delete(dateKey);
+  }
+}
+
+// ============================================================================
+// SYNC STATUS INDICATOR & SUPABASE PERSISTENCE
 // ============================================================================
 function setSyncStatus(status, customTitle) {
   state.syncStatus = status;
@@ -382,6 +776,121 @@ async function runSupabaseWrite(operationFn) {
   }
 }
 
+async function ensureAndLoadUserSettings() {
+  if (!state.user) return;
+  const { data, error } = await supabase
+    .from("user_settings")
+    .select("*")
+    .eq("user_id", state.user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (data) {
+    state.userSettings = normalizeUserSettings(data, state.user.id);
+    saveUserSettingsToCache();
+    return;
+  }
+
+  // Create default row on first login
+  const defaultRow = createDefaultUserSettings(state.user.id);
+  const insertRes = await supabase
+    .from("user_settings")
+    .insert(defaultRow)
+    .select()
+    .single();
+
+  if (insertRes.error) {
+    // Handle race condition if another tab created it simultaneously
+    const retry = await supabase
+      .from("user_settings")
+      .select("*")
+      .eq("user_id", state.user.id)
+      .maybeSingle();
+    state.userSettings = normalizeUserSettings(retry.data || defaultRow, state.user.id);
+  } else {
+    state.userSettings = normalizeUserSettings(insertRes.data || defaultRow, state.user.id);
+  }
+  saveUserSettingsToCache();
+}
+
+async function saveUserSettings(patch, { silentToast = false } = {}) {
+  const next = normalizeUserSettings({ ...getSettings(), ...patch }, state.user?.id || null);
+  state.userSettings = next;
+  saveUserSettingsToCache();
+
+  syncMealsStripUI();
+  recomputePlanAndRender({ scheduleSync: true });
+  if (!dom.settingsView.hidden) {
+    populateSettingsUI();
+  }
+
+  if (state.user) {
+    await runSupabaseWrite(() =>
+      supabase.from("user_settings").upsert(next, { onConflict: "user_id" })
+    );
+  }
+
+  if (!silentToast) {
+    showToast("Settings saved");
+  }
+}
+
+function schedulePlannedEventsSync() {
+  if (!state.user) return;
+  clearTimeout(state.plannedSyncTimer);
+  state.plannedSyncTimer = setTimeout(() => {
+    syncPlannedEventsToSupabase();
+  }, 1100);
+}
+
+async function syncPlannedEventsToSupabase() {
+  if (!state.user || !navigator.onLine || !state.latestSevenDayPlan) return;
+
+  const myVersion = ++state.plannedSyncVersion;
+  const now = new Date();
+  const startOfToday = addLocalDays(now, 0);
+  const horizonStartIso = startOfToday.toISOString();
+
+  // Gather upcoming 7 days (offsets 0..6) of non-class blocks: meal, run, study, shower, sleep
+  const rows = [];
+  for (let offset = 0; offset <= 6; offset++) {
+    const dayPlan = state.latestSevenDayPlan.days[offset];
+    if (!dayPlan) continue;
+    for (const block of dayPlan.blocks) {
+      if (!["meal", "run", "study", "shower", "sleep"].includes(block.eventType)) continue;
+      rows.push({
+        user_id: state.user.id,
+        event_type: block.eventType,
+        title: block.icsTitle || block.title,
+        location: block.location || "",
+        notes: block.notes || "",
+        start_at: dateFromDayAndMinute(dayPlan.date, block.startMin).toISOString(),
+        end_at: dateFromDayAndMinute(dayPlan.date, block.endMin).toISOString()
+      });
+    }
+  }
+
+  await runSupabaseWrite(async () => {
+    if (myVersion !== state.plannedSyncVersion) return { error: null };
+
+    const delRes = await supabase
+      .from("planned_events")
+      .delete()
+      .eq("user_id", state.user.id)
+      .gte("start_at", horizonStartIso);
+
+    if (delRes.error) return { error: delRes.error };
+    if (myVersion !== state.plannedSyncVersion) return { error: null };
+
+    if (rows.length > 0) {
+      const insRes = await supabase.from("planned_events").insert(rows);
+      if (insRes.error) return { error: insRes.error };
+    }
+    return { error: null };
+  });
+}
+
 async function syncFromSupabase(showFeedback = false) {
   if (!state.user) return;
   if (!navigator.onLine) {
@@ -394,7 +903,8 @@ async function syncFromSupabase(showFeedback = false) {
   try {
     const [tasksRes, pillarsRes] = await Promise.all([
       supabase.from("tasks").select("*").order("created_at", { ascending: true }),
-      supabase.from("class_pillars").select("*").order("start_time", { ascending: true })
+      supabase.from("class_pillars").select("*").order("start_time", { ascending: true }),
+      ensureAndLoadUserSettings()
     ]);
 
     if (tasksRes.error) throw tasksRes.error;
@@ -406,7 +916,14 @@ async function syncFromSupabase(showFeedback = false) {
     savePillarsToCache();
 
     setSyncStatus("synced");
-    renderAllVisibleViews();
+    syncMealsStripUI();
+    recomputePlanAndRender({ scheduleSync: true });
+
+    // Fetch live Purdue dining hours for today & tomorrow in background
+    const now = new Date();
+    fetchDiningHoursForDate(toLocalDateKey(now));
+    fetchDiningHoursForDate(toLocalDateKey(addLocalDays(now, 1)));
+
     if (showFeedback) showToast("Synced with Supabase");
   } catch (err) {
     console.error("Supabase sync read failed:", err);
@@ -415,37 +932,8 @@ async function syncFromSupabase(showFeedback = false) {
   }
 }
 
-function normalizeTask(row) {
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    title: row.title || "",
-    course: row.course || "Personal",
-    due_at: row.due_at || new Date().toISOString(),
-    duration_minutes: Math.max(1, Number(row.duration_minutes) || 30),
-    all_at_once: Boolean(row.all_at_once),
-    is_starred: Boolean(row.is_starred),
-    status: row.status === "completed" ? "completed" : "active",
-    sort_order: Number(row.sort_order) || 0,
-    created_at: row.created_at || new Date().toISOString()
-  };
-}
-
-function normalizePillar(row) {
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    name: row.name || "",
-    days_of_week: Array.isArray(row.days_of_week) ? row.days_of_week.map(Number).sort((a, b) => a - b) : [],
-    start_time: row.start_time || "09:00",
-    end_time: row.end_time || "10:00",
-    walk_buffer_minutes: Number.isFinite(Number(row.walk_buffer_minutes)) ? Number(row.walk_buffer_minutes) : 15,
-    created_at: row.created_at || new Date().toISOString()
-  };
-}
-
 // ============================================================================
-// SMART SORTING & BETWEEN-CLASS "GAP-FIT OVERRIDE" ENGINE
+// V1 SMART SORTING & BETWEEN-CLASS "GAP-FIT OVERRIDE" ENGINE
 // Note: is_starred is strictly visual and NEVER influences task ordering.
 // ============================================================================
 function getActiveGapContext(pillars, now = new Date()) {
@@ -573,7 +1061,6 @@ function computeFocusState(now = new Date()) {
   if (gap.isGap && !bypassBreak) {
     const gapQueue = buildOrderedQueue(activeTasks, now, { alternate: false });
 
-    // 1. Highest-priority task that fits completely in availableMinutes
     const fitting = gapQueue.find((t) => t.duration_minutes <= gap.availableMinutes);
     if (fitting) {
       const carouselQueue = [fitting, ...openQueue.filter((t) => t.id !== fitting.id)];
@@ -587,7 +1074,6 @@ function computeFocusState(now = new Date()) {
       };
     }
 
-    // 2. Highest-priority task where all_at_once === false (partial slice)
     const sliceable = gapQueue.find((t) => !t.all_at_once);
     if (sliceable) {
       const carouselQueue = [sliceable, ...openQueue.filter((t) => t.id !== sliceable.id)];
@@ -601,7 +1087,6 @@ function computeFocusState(now = new Date()) {
       };
     }
 
-    // 3. All remaining tasks are all_at_once and none fit -> calm break card
     return {
       mode: "break",
       gap,
@@ -623,13 +1108,597 @@ function computeFocusState(now = new Date()) {
 }
 
 // ============================================================================
-// "LATER TODAY" DEFERRAL & LATE WARNING ENGINE
+// V2 DYNAMIC WAKE-UP, SHOWERS, SLEEP, MEALS, RUNS & 7-DAY AUTO-PLANNER
+// ============================================================================
+function computeDynamicWakeInfo(dayDate, pillars, settings) {
+  const dow = dayDate.getDay();
+  const dayClasses = pillars
+    .filter((p) => Array.isArray(p.days_of_week) && p.days_of_week.includes(dow))
+    .slice()
+    .sort((a, b) => parseHHMM(a.start_time) - parseHHMM(b.start_time));
+
+  if (dayClasses.length === 0) {
+    return {
+      wakeMin: parseHHMM(settings.no_class_wake_time || "08:30"),
+      needsPostClassShower: false,
+      firstClass: null,
+      dayClasses
+    };
+  }
+
+  const firstClass = dayClasses[0];
+  const firstStartMin = parseHHMM(firstClass.start_time);
+
+  // If first class <= 07:45 (465), wake at 06:45 (405) & mandatory 20m post-class shower
+  if (firstStartMin <= 465) {
+    return {
+      wakeMin: 405, // 06:45 AM
+      needsPostClassShower: true,
+      firstClass,
+      dayClasses
+    };
+  }
+
+  // First class >= 08:00 (or > 07:45): wake 60 minutes before first class start_time
+  return {
+    wakeMin: Math.max(0, firstStartMin - 60),
+    needsPostClassShower: false,
+    firstClass,
+    dayClasses
+  };
+}
+
+function mergeBusyIntervals(intervals) {
+  if (intervals.length === 0) return [];
+  const sorted = intervals
+    .map(([s, e]) => [s, e])
+    .filter(([s, e]) => e > s)
+    .sort((a, b) => a[0] - b[0]);
+  if (sorted.length === 0) return [];
+  const merged = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1];
+    if (sorted[i][0] <= last[1]) {
+      last[1] = Math.max(last[1], sorted[i][1]);
+    } else {
+      merged.push(sorted[i]);
+    }
+  }
+  return merged;
+}
+
+function computeFreeGapsInRange(rangeStart, rangeEnd, busyIntervals) {
+  if (rangeEnd <= rangeStart) return [];
+  const merged = mergeBusyIntervals(busyIntervals);
+  const gaps = [];
+  let cursor = rangeStart;
+  for (const [bStart, bEnd] of merged) {
+    if (bEnd <= rangeStart) continue;
+    if (bStart >= rangeEnd) break;
+    if (bStart > cursor) {
+      gaps.push([cursor, Math.min(bStart, rangeEnd)]);
+    }
+    cursor = Math.max(cursor, bEnd);
+  }
+  if (cursor < rangeEnd) {
+    gaps.push([cursor, rangeEnd]);
+  }
+  return gaps;
+}
+
+function hasOverlap(start, end, busyIntervals) {
+  for (const [bStart, bEnd] of busyIntervals) {
+    if (start < bEnd && end > bStart) return true;
+  }
+  return false;
+}
+
+function intersectIntervals(aStart, aEnd, listB) {
+  const out = [];
+  for (const b of listB) {
+    const s = Math.max(aStart, b.start);
+    const e = Math.min(aEnd, b.end);
+    if (e > s) out.push({ start: s, end: e, courtStart: b.start, courtEnd: b.end, label: b.label });
+  }
+  out.sort((x, y) => x.start - y.start);
+  return out;
+}
+
+function findMealSlot({
+  mealIndex,
+  court,
+  winStart,
+  winEnd,
+  dateKey,
+  effectiveStart,
+  hardEnd,
+  busyIntervals,
+  prevMealEatEnd
+}) {
+  const walkMin = court === "Ford" ? 15 : 10;
+  const eatMin = 30;
+  const postMin = 10;
+
+  // If user re-flowed past this meal's entire window, don't force an expired meal into the evening
+  if (effectiveStart > winEnd - eatMin) {
+    return null;
+  }
+
+  const courtInfo = getCourtOpenIntervals(court, dateKey);
+  const intersections = intersectIntervals(winStart, winEnd, courtInfo.intervals);
+
+  const searchInRanges = (ranges, minSpacing) => {
+    for (const r of ranges) {
+      const earliestEat = Math.max(
+        r.start,
+        effectiveStart + walkMin,
+        prevMealEatEnd !== null ? prevMealEatEnd + minSpacing : 0
+      );
+      const latestEat = Math.min(r.end - eatMin, hardEnd - eatMin - postMin);
+      for (let t = Math.ceil(earliestEat / 5) * 5; t <= latestEat; t += 5) {
+        const blockStart = t - walkMin;
+        const blockEnd = t + eatMin + postMin;
+        if (!hasOverlap(blockStart, blockEnd, busyIntervals)) {
+          return {
+            eatStart: t,
+            eatEnd: t + eatMin,
+            walkStart: blockStart,
+            postEnd: blockEnd,
+            walkMin,
+            postMin,
+            court,
+            courtStart: r.courtStart ?? r.start,
+            courtEnd: r.courtEnd ?? r.end,
+            isOffCampus: courtInfo.isOffCampus,
+            usedFallbackWindow: false
+          };
+        }
+      }
+    }
+    return null;
+  };
+
+  // Try live court open intersection with comfortable spacing first, then tighter spacing
+  let slot = searchInRanges(intersections, 120) || searchInRanges(intersections, 60) || searchInRanges(intersections, 15);
+  if (slot) return slot;
+
+  // Fallback to user's window if court is closed or all open intervals clashed with classes
+  const fallbackRanges = [{ start: winStart, end: winEnd, courtStart: winStart, courtEnd: winEnd }];
+  slot = searchInRanges(fallbackRanges, 90) || searchInRanges(fallbackRanges, 15);
+  if (slot) {
+    slot.usedFallbackWindow = !courtInfo.isOffCampus;
+    return slot;
+  }
+
+  return null;
+}
+
+function selectRunDaysForWeek(todayDate, pillars, tasks, settings) {
+  const runsPerWeek = Math.max(0, Math.min(7, Math.round(Number(settings.runs_per_week) ?? 2)));
+  if (runsPerWeek === 0) return new Set();
+
+  const preferredSet = new Set(Array.isArray(settings.preferred_run_days) ? settings.preferred_run_days : [3, 6]);
+  const activeTasks = tasks.filter((t) => t.status === "active");
+
+  const dayScores = [];
+  for (let offset = 0; offset <= 6; offset++) {
+    const d = addLocalDays(todayDate, offset);
+    const key = toLocalDateKey(d);
+    const dow = d.getDay();
+
+    const classMins = pillars
+      .filter((p) => Array.isArray(p.days_of_week) && p.days_of_week.includes(dow))
+      .reduce((acc, p) => acc + Math.max(0, parseHHMM(p.end_time) - parseHHMM(p.start_time) + (p.walk_buffer_minutes || 15)), 0);
+
+    const taskMins = activeTasks
+      .filter((t) => toLocalDateKey(new Date(t.due_at)) === key)
+      .reduce((acc, t) => acc + (t.duration_minutes || 30), 0);
+
+    dayScores.push({
+      offset,
+      dow,
+      isPreferred: preferredSet.has(dow),
+      load: classMins + taskMins
+    });
+  }
+
+  const chosen = new Set();
+
+  // First honor preferred_run_days (lightest first)
+  const prefCandidates = dayScores.filter((x) => x.isPreferred).sort((a, b) => a.load - b.load || a.offset - b.offset);
+  for (const c of prefCandidates) {
+    if (chosen.size >= runsPerWeek) break;
+    chosen.add(c.offset);
+  }
+
+  // Fill remaining runs on lightest class/task load days (preferring non-adjacent days when possible)
+  if (chosen.size < runsPerWeek) {
+    const rest = dayScores.filter((x) => !chosen.has(x.offset)).sort((a, b) => a.load - b.load || a.offset - b.offset);
+    for (const c of rest) {
+      if (chosen.size >= runsPerWeek) break;
+      const adjacent = chosen.has(c.offset - 1) || chosen.has(c.offset + 1);
+      if (!adjacent) chosen.add(c.offset);
+    }
+    for (const c of rest) {
+      if (chosen.size >= runsPerWeek) break;
+      chosen.add(c.offset);
+    }
+  }
+
+  return chosen;
+}
+
+function findRunSlot(effectiveStart, preferredStudyEndMin, busyIntervals) {
+  const RUN_TOTAL = 130; // 10m Prep + 60m Run + 60m Post-Run Cooldown & Shower
+  const gaps = computeFreeGapsInRange(effectiveStart, preferredStudyEndMin, busyIntervals);
+  const viable = gaps.filter(([s, e]) => e - s >= RUN_TOTAL);
+  if (viable.length === 0) return null;
+
+  // Prefer an afternoon slot (~15:00-17:30) or late morning (~10:00), otherwise first viable gap
+  const targetPreferredStart = 930; // 3:30 PM
+  let bestStart = null;
+  let bestDist = Infinity;
+
+  for (const [s, e] of viable) {
+    const alignedMin = Math.ceil(s / 5) * 5;
+    const latestStart = e - RUN_TOTAL;
+    if (alignedMin > latestStart) continue;
+
+    // Pick point inside [alignedMin, latestStart] closest to targetPreferredStart
+    const candidate = Math.max(alignedMin, Math.min(latestStart, targetPreferredStart));
+    const rounded = Math.round(candidate / 5) * 5;
+    const clamped = Math.max(alignedMin, Math.min(latestStart, rounded));
+    const dist = Math.abs(clamped - targetPreferredStart);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestStart = clamped;
+    }
+  }
+
+  return bestStart !== null ? { start: bestStart, end: bestStart + RUN_TOTAL } : null;
+}
+
+function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = state.pillars, settings = getSettings() } = {}) {
+  const todayDate = addLocalDays(now, 0);
+  const todayKey = toLocalDateKey(todayDate);
+
+  // Use reflow anchor if active for today
+  const todayReflowMin =
+    state.reflowAnchorDateKey === todayKey && state.reflowAnchorMin !== null
+      ? state.reflowAnchorMin
+      : null;
+
+  const runDayOffsets = selectRunDaysForWeek(todayDate, pillars, tasks, settings);
+
+  // Build ordered active task pool for slotting across Days 0..6
+  const orderedActive = buildOrderedQueue(tasks, now, { alternate: true });
+  const taskPool = orderedActive.map((t) => ({
+    task: t,
+    dueKey: getBucketKey(t, now) === "0000-OVERDUE" ? todayKey : toLocalDateKey(new Date(t.due_at)),
+    remaining: Math.max(5, Math.round(t.duration_minutes || 30)),
+    partCount: 0
+  }));
+
+  const days = {};
+
+  // Build Yesterday (-1) as light context + Days 0..6 full auto-plan
+  for (let offset = -1; offset <= 6; offset++) {
+    const dayDate = addLocalDays(todayDate, offset);
+    const dateKey = toLocalDateKey(dayDate);
+    const wakeInfo = computeDynamicWakeInfo(dayDate, pillars, settings);
+    const tomorrowWakeInfo = computeDynamicWakeInfo(addLocalDays(dayDate, 1), pillars, settings);
+
+    const tomorrowWakeTimelineMin = 1440 + tomorrowWakeInfo.wakeMin;
+    const prefSleepMin = Math.round((Number(settings.preferred_sleep_hours) || 8.0) * 60);
+    const minSleepMin = Math.round((Number(settings.min_sleep_hours) || 7.0) * 60);
+    const eveningShowerMin = Math.max(0, Math.round(Number(settings.evening_shower_minutes) ?? 40));
+
+    const preferredBedMin = tomorrowWakeTimelineMin - prefSleepMin;
+    const hardBedMin = tomorrowWakeTimelineMin - minSleepMin;
+    const preferredStudyEndMin = preferredBedMin - eveningShowerMin;
+    const hardStudyEndMin = hardBedMin - eveningShowerMin;
+
+    const effectiveStart =
+      offset === 0 && todayReflowMin !== null
+        ? Math.max(wakeInfo.wakeMin, todayReflowMin)
+        : wakeInfo.wakeMin;
+
+    const blocks = [];
+    const busyForFixed = []; // [start, end] occupied by classes/showers/meals/runs
+    const busyForStudy = []; // includes 15m breathing gap after classes & runs
+
+    // 1. Classes + Walk Buffers (excluded from planned_events, marked In iPhone Cal)
+    for (const pillar of wakeInfo.dayClasses) {
+      const walkBuf = Number.isFinite(pillar.walk_buffer_minutes) ? pillar.walk_buffer_minutes : 15;
+      const classStart = parseHHMM(pillar.start_time);
+      const classEnd = parseHHMM(pillar.end_time);
+      const walkStart = Math.max(0, classStart - walkBuf);
+
+      blocks.push({
+        eventType: "class",
+        title: pillar.name,
+        startMin: walkStart,
+        endMin: classEnd,
+        classStartMin: classStart,
+        walkMin: walkBuf,
+        meta: `${walkBuf}m walk (${formatMinuteOfDay(walkStart)}) + Class ${formatMinuteOfDay(classStart)}–${formatMinuteOfDay(classEnd)}`,
+        badge: "In iPhone Cal"
+      });
+
+      busyForFixed.push([walkStart, classEnd]);
+      busyForStudy.push([walkStart, classEnd + 15]); // 15m anti-fatigue gap after class
+    }
+
+    // 2. Mandatory 20m Post-Class Shower & Reset if first class <= 07:45
+    if (wakeInfo.needsPostClassShower && wakeInfo.firstClass) {
+      const firstEnd = parseHHMM(wakeInfo.firstClass.end_time);
+      const showerEnd = firstEnd + 20;
+      blocks.push({
+        eventType: "shower",
+        title: "Post-Class Shower & Reset",
+        icsTitle: "Post-Class Shower & Reset",
+        location: "",
+        notes: "Mandatory 20m post-class shower after early morning class.",
+        startMin: firstEnd,
+        endMin: showerEnd,
+        meta: "20m mandatory reset after early class"
+      });
+      busyForFixed.push([firstEnd, showerEnd]);
+      busyForStudy.push([firstEnd, showerEnd + 10]);
+    }
+
+    // 3. Meals (2 or 3 meals intersected with live Purdue Dining hours)
+    const mealCount = settings.meals_per_day === 3 ? 3 : 2;
+    let prevMealEatEnd = null;
+    for (let m = 1; m <= mealCount; m++) {
+      const court = settings[`meal_${m}_court`] || (m === 1 ? "Wiley" : m === 2 ? "Ford" : "Earhart");
+      const winStart = parseHHMM(settings[`meal_${m}_window_start`]);
+      const winEnd = parseHHMM(settings[`meal_${m}_window_end`]);
+
+      const slot = findMealSlot({
+        mealIndex: m,
+        court,
+        winStart,
+        winEnd,
+        dateKey,
+        effectiveStart,
+        hardEnd: preferredStudyEndMin,
+        busyIntervals: busyForFixed,
+        prevMealEatEnd
+      });
+
+      if (slot) {
+        prevMealEatEnd = slot.eatEnd;
+        const openWindowStr = slot.isOffCampus
+          ? "Off-Campus"
+          : slot.usedFallbackWindow
+            ? `${court} closed in window · fallback`
+            : `Open ${formatMinuteOfDay(slot.courtStart)}–${formatMinuteOfDay(slot.courtEnd)}`;
+
+        blocks.push({
+          eventType: "meal",
+          mealIndex: m,
+          court,
+          title: `Meal ${m} · ${court}`,
+          icsTitle: `Meal ${m} — ${court}`,
+          location: court === "Off-Campus" ? "Off-Campus" : `${court} Dining Court`,
+          notes: `${slot.walkMin}m walk + 30m meal + 10m transition (${openWindowStr})`,
+          startMin: slot.walkStart,
+          endMin: slot.eatEnd,
+          postEndMin: slot.postEnd,
+          meta: `${slot.walkMin}m walk + 30m meal + 10m reset`,
+          badge: openWindowStr
+        });
+
+        busyForFixed.push([slot.walkStart, slot.postEnd]);
+        busyForStudy.push([slot.walkStart, slot.postEnd]); // includes 10m post-meal transition
+      }
+    }
+
+    // 4. Protected 130m Run Block (10m Prep -> 60m Run -> 60m Cooldown & Shower)
+    let hasRun = false;
+    if (offset >= 0 && runDayOffsets.has(offset)) {
+      const runSlot = findRunSlot(effectiveStart, preferredStudyEndMin, busyForFixed);
+      if (runSlot) {
+        hasRun = true;
+        blocks.push({
+          eventType: "run",
+          dayOffset: offset,
+          title: "1-Hour Run Block",
+          icsTitle: "1-Hour Run (Prep + Run + Cooldown & Shower)",
+          location: "",
+          notes: "10m Run Prep → 60m Run → 60m Post-Run Cooldown & Shower (130m protected block).",
+          startMin: runSlot.start,
+          endMin: runSlot.end,
+          meta: "10m Prep → 60m Run → 60m Cooldown & Shower"
+        });
+        busyForFixed.push([runSlot.start, runSlot.end]);
+        busyForStudy.push([runSlot.start, runSlot.end + 15]); // 15m breathing gap after run
+      }
+    }
+
+    // 5. Anti-Fatigue Study Task Slotting (Only for Today 0..6, not Yesterday -1)
+    let sleepStatus = "optimal"; // "optimal" | "flexed" | "overload"
+    let actualShowerStart = preferredStudyEndMin;
+    let actualBedMin = preferredBedMin;
+    const overflowTasks = [];
+    let overflowMinutes = 0;
+
+    if (offset >= 0) {
+      const STUDY_GAP = 15; // Mandatory 15m anti-fatigue breathing room between consecutive study blocks
+
+      const slotItemsIntoRange = (rangeStart, rangeEnd, itemFilter) => {
+        let lastPlacedEnd = rangeStart;
+        const gaps = computeFreeGapsInRange(rangeStart, rangeEnd, busyForStudy);
+
+        for (const [gapStart, gapEnd] of gaps) {
+          let cursor = Math.ceil(gapStart / 5) * 5;
+
+          while (cursor < gapEnd) {
+            const avail = gapEnd - cursor;
+            if (avail < 15) break;
+
+            // Pick next eligible task in priority order
+            const candidate = taskPool.find((item) => {
+              if (item.remaining <= 0) return false;
+              if (!itemFilter(item)) return false;
+              if (item.task.all_at_once && item.remaining > avail) return false;
+              if (!item.task.all_at_once && avail < Math.min(20, item.remaining)) return false;
+              return true;
+            });
+
+            if (!candidate) break;
+
+            const chunk = candidate.task.all_at_once
+              ? candidate.remaining
+              : Math.min(candidate.remaining, avail);
+
+            const blockStart = cursor;
+            const blockEnd = cursor + chunk;
+            candidate.remaining -= chunk;
+            candidate.partCount += 1;
+
+            const isSplit = candidate.remaining > 0 || candidate.partCount > 1;
+            const isPersonal = candidate.task.course.toLowerCase() === "personal";
+
+            blocks.push({
+              eventType: "study",
+              taskId: candidate.task.id,
+              task: candidate.task,
+              isPersonal,
+              isStarred: Boolean(candidate.task.is_starred),
+              title: isSplit ? `${candidate.task.title} (Part ${candidate.partCount})` : candidate.task.title,
+              icsTitle: `${candidate.task.course}: ${candidate.task.title}`,
+              location: candidate.task.course,
+              notes: `Due ${formatDueLabel(candidate.task.due_at, now)} · ${formatDuration(chunk)} block`,
+              startMin: blockStart,
+              endMin: blockEnd,
+              durationMin: chunk,
+              meta: `${formatDuration(chunk)} · ${formatDueLabel(candidate.task.due_at, now)}`,
+              badge: candidate.task.course
+            });
+
+            busyForStudy.push([blockStart, blockEnd + STUDY_GAP]);
+            lastPlacedEnd = Math.max(lastPlacedEnd, blockEnd);
+            cursor = blockEnd + STUDY_GAP;
+          }
+        }
+        return lastPlacedEnd;
+      };
+
+      // Pass 1A: Slot tasks due on or before this day inside preferred 8h sleep window
+      slotItemsIntoRange(effectiveStart, preferredStudyEndMin, (item) => item.dueKey <= dateKey);
+
+      // Pass 1B: Gently pull forward upcoming tasks into spare healthy capacity before 8h sleep cutoff
+      slotItemsIntoRange(effectiveStart, preferredStudyEndMin, (item) => item.dueKey > dateKey);
+
+      // Check if any tasks due on/before this day STILL remain unscheduled
+      const urgentRemaining = () => taskPool.filter((item) => item.remaining > 0 && item.dueKey <= dateKey);
+
+      if (urgentRemaining().length > 0 && hardStudyEndMin > preferredStudyEndMin) {
+        // Pass 2: Flex sleep buffer between 8h preferred and 7h floor for urgent tasks due today
+        const flexStart = Math.max(effectiveStart, preferredStudyEndMin);
+        const flexLastEnd = slotItemsIntoRange(flexStart, hardStudyEndMin, (item) => item.dueKey <= dateKey);
+
+        const stillRemaining = urgentRemaining();
+        if (stillRemaining.length === 0) {
+          sleepStatus = "flexed";
+          actualShowerStart = Math.min(hardStudyEndMin, Math.max(preferredStudyEndMin, flexLastEnd));
+          actualBedMin = actualShowerStart + eveningShowerMin;
+        } else {
+          sleepStatus = "overload";
+          actualShowerStart = hardStudyEndMin;
+          actualBedMin = hardBedMin;
+          for (const rem of stillRemaining) {
+            overflowTasks.push({
+              task: rem.task,
+              remainingMinutes: rem.remaining
+            });
+            overflowMinutes += rem.remaining;
+          }
+        }
+      } else if (urgentRemaining().length > 0) {
+        sleepStatus = "overload";
+        actualShowerStart = hardStudyEndMin;
+        actualBedMin = hardBedMin;
+        for (const rem of urgentRemaining()) {
+          overflowTasks.push({
+            task: rem.task,
+            remainingMinutes: rem.remaining
+          });
+          overflowMinutes += rem.remaining;
+        }
+      }
+    }
+
+    // 6. Evening Shower & Wind-Down
+    if (eveningShowerMin > 0) {
+      blocks.push({
+        eventType: "shower",
+        title: "Evening Shower & Wind-Down",
+        icsTitle: "Evening Shower & Wind-Down",
+        location: "",
+        notes: `${eveningShowerMin}m relaxing evening shower before bedtime.`,
+        startMin: actualShowerStart,
+        endMin: actualBedMin,
+        meta: `${eveningShowerMin}m relaxing wind-down before bed`
+      });
+    }
+
+    // 7. Sleep Anchor (Deep Twilight Indigo)
+    const actualSleepMin = Math.max(0, tomorrowWakeTimelineMin - actualBedMin);
+    const actualSleepHours = actualSleepMin / 60;
+    blocks.push({
+      eventType: "sleep",
+      title: `Sleep Anchor · ${formatSleepHoursLabel(actualSleepHours)}`,
+      icsTitle: `Sleep (${formatSleepHoursLabel(actualSleepHours)})`,
+      location: "",
+      notes: `Wake at ${formatMinuteOfDay(tomorrowWakeInfo.wakeMin)} tomorrow (${formatHoursAndMins(actualSleepMin)} sleep).`,
+      startMin: actualBedMin,
+      endMin: tomorrowWakeTimelineMin,
+      sleepHours: actualSleepHours,
+      sleepMinutes: actualSleepMin,
+      meta: `Wake at ${formatMinuteOfDay(tomorrowWakeInfo.wakeMin)} tomorrow`,
+      badge: sleepStatus === "overload" ? "7h Floor Protected" : sleepStatus === "flexed" ? "Flexed" : "Protected"
+    });
+
+    blocks.sort((a, b) => a.startMin - b.startMin);
+
+    days[offset] = {
+      offset,
+      date: dayDate,
+      dateKey,
+      wakeMin: wakeInfo.wakeMin,
+      tomorrowWakeMin: tomorrowWakeInfo.wakeMin,
+      preferredBedMin,
+      hardBedMin,
+      actualBedMin,
+      actualSleepMinutes: actualSleepMin,
+      actualSleepHours,
+      sleepStatus,
+      overflowTasks,
+      overflowMinutes,
+      hasRun,
+      classCount: wakeInfo.dayClasses.length,
+      blocks
+    };
+  }
+
+  return {
+    generatedAt: now.getTime(),
+    todayKey,
+    runDayOffsets,
+    days
+  };
+}
+
+// ============================================================================
+// "LATER TODAY" DEFERRAL & LATE WARNING ENGINE (V1 PRESERVED)
 // ============================================================================
 function computeFreeMinutesBetween(startDate, endDate, pillars) {
   if (endDate <= startDate) return 0;
 
   const totalSpanMinutes = (endDate.getTime() - startDate.getTime()) / 60000;
-  // Fast path: if deadline is more than 14 days away, plenty of free time
   if (totalSpanMinutes > 14 * 24 * 60) return totalSpanMinutes;
 
   let freeMinutes = 0;
@@ -647,7 +1716,6 @@ function computeFreeMinutesBetween(startDate, endDate, pillars) {
       let dayFree = segEndMin - segStartMin;
       const dow = cursorDay.getDay();
 
-      // Collect blocked intervals for this day (walk-out through class end)
       const blocks = [];
       for (const p of pillars) {
         if (!Array.isArray(p.days_of_week) || !p.days_of_week.includes(dow)) continue;
@@ -657,18 +1725,8 @@ function computeFreeMinutesBetween(startDate, endDate, pillars) {
         if (bEnd > bStart) blocks.push([bStart, bEnd]);
       }
 
-      // Merge overlapping class blocks before subtracting
       if (blocks.length > 0) {
-        blocks.sort((a, b) => a[0] - b[0]);
-        const merged = [blocks[0]];
-        for (let i = 1; i < blocks.length; i++) {
-          const last = merged[merged.length - 1];
-          if (blocks[i][0] <= last[1]) {
-            last[1] = Math.max(last[1], blocks[i][1]);
-          } else {
-            merged.push(blocks[i]);
-          }
-        }
+        const merged = mergeBusyIntervals(blocks);
         for (const [bStart, bEnd] of merged) {
           dayFree -= bEnd - bStart;
         }
@@ -698,7 +1756,6 @@ function computeLaterTodayPlan(task, now = new Date()) {
     return { canDefer: false, reason: "already_last" };
   }
 
-  // Move behind the next 1-2 smaller tasks (duration_minutes <= 30) in the same due-date bucket
   const smallerAfter = after.filter((t) => t.duration_minutes <= 30);
   let targetTask;
   if (smallerAfter.length >= 2) {
@@ -714,11 +1771,9 @@ function computeLaterTodayPlan(task, now = new Date()) {
   const insertIdx = targetIdxInNew + 1;
   newBucket.splice(insertIdx, 0, task);
 
-  // Compute minimal sort_order updates that faithfully preserve newBucket order
   const orderUpdates = new Map();
 
   if (insertIdx === newBucket.length - 1) {
-    // Moving to end of bucket -> positive sort_order > max in bucket
     const maxOrder = Math.max(0, ...bucket.map((t) => Number(t.sort_order) || 0));
     orderUpdates.set(task.id, maxOrder + 100);
   } else {
@@ -741,18 +1796,15 @@ function computeLaterTodayPlan(task, now = new Date()) {
     }
 
     if (orderUpdates.size === 0) {
-      // Anchor items cleanly so sortBucketTasks reproduces newBucket exactly
       const hasPosBeforeInsert = newBucket
         .slice(0, insertIdx)
         .some((t) => (Number(t.sort_order) || 0) > 0);
 
       if (hasPosBeforeInsert) {
-        // Re-space whole bucket cleanly in positive space
         newBucket.forEach((t, idx) => {
           orderUpdates.set(t.id, (idx + 1) * 100);
         });
       } else {
-        // Anchor prefix up to the last negative item (at least through insertIdx) into negative space
         let anchorEnd = insertIdx;
         for (let i = insertIdx + 1; i < newBucket.length; i++) {
           if ((Number(newBucket[i].sort_order) || 0) < 0) {
@@ -776,7 +1828,6 @@ function computeLaterTodayPlan(task, now = new Date()) {
     }
   }
 
-  // Late Warning Check: simulate projected queue & compare required work minutes vs remaining free time before due_at
   const simulatedTasks = activeTasks.map((t) => {
     const updated = orderUpdates.get(t.id);
     return updated !== undefined ? { ...t, sort_order: updated } : t;
@@ -802,7 +1853,7 @@ function computeLaterTodayPlan(task, now = new Date()) {
 }
 
 // ============================================================================
-// UNDO / REDO HISTORY ENGINE (Full Supabase Sync)
+// UNDO / REDO HISTORY ENGINE (Done & Later Today ONLY)
 // ============================================================================
 function pushUndoAction(action) {
   state.undoStack.push(action);
@@ -819,7 +1870,6 @@ function updateHistoryButtons() {
 }
 
 async function applyHistoryStep(action, direction) {
-  // direction: "undo" | "redo"
   const isUndo = direction === "undo";
 
   if (action.type === "complete") {
@@ -828,7 +1878,7 @@ async function applyHistoryStep(action, direction) {
     if (task) {
       task.status = nextStatus;
       saveTasksToCache();
-      renderAllVisibleViews({ animateEnter: true });
+      recomputePlanAndRender({ animateEnter: true, scheduleSync: true });
       await runSupabaseWrite(() =>
         supabase.from("tasks").update({ status: nextStatus }).eq("id", action.taskId)
       );
@@ -844,7 +1894,7 @@ async function applyHistoryStep(action, direction) {
       if (task) task.sort_order = u.sort_order;
     }
     saveTasksToCache();
-    renderAllVisibleViews({ animateEnter: true });
+    recomputePlanAndRender({ animateEnter: true, scheduleSync: true });
 
     await runSupabaseWrite(async () => {
       const results = await Promise.all(
@@ -900,7 +1950,7 @@ async function completeTaskWithAnimation(task) {
   }
 
   state.isAnimatingCard = false;
-  renderAllVisibleViews({ animateEnter: true });
+  recomputePlanAndRender({ animateEnter: true, scheduleSync: true });
 
   await runSupabaseWrite(() =>
     supabase.from("tasks").update({ status: "completed" }).eq("id", task.id)
@@ -912,7 +1962,7 @@ async function executeLaterTodayPlan(plan) {
   const cardEl = dom.focusCardSlot.querySelector(".focus-card");
   state.isAnimatingCard = true;
 
-  if (cardEl) {
+  if (cardEl && state.activeTab === "focus") {
     cardEl.classList.remove("anim-enter");
     cardEl.classList.add("anim-exit-later");
     await new Promise((r) => setTimeout(r, 220));
@@ -932,7 +1982,7 @@ async function executeLaterTodayPlan(plan) {
   }
 
   state.isAnimatingCard = false;
-  renderAllVisibleViews({ animateEnter: true });
+  recomputePlanAndRender({ animateEnter: true, scheduleSync: true });
 
   if (plan.changes.length > 0) {
     await runSupabaseWrite(async () => {
@@ -985,7 +2035,7 @@ async function createTask(payload) {
 
   state.tasks.push(newTask);
   saveTasksToCache();
-  renderAllVisibleViews({ animateEnter: true });
+  recomputePlanAndRender({ animateEnter: true, scheduleSync: true, checkOverloadModal: true });
 
   await runSupabaseWrite(() => supabase.from("tasks").insert(newTask));
 }
@@ -1007,7 +2057,7 @@ async function updateTask(taskId, payload) {
 
   state.tasks[idx] = after;
   saveTasksToCache();
-  renderAllVisibleViews();
+  recomputePlanAndRender({ scheduleSync: true, checkOverloadModal: true });
 
   await runSupabaseWrite(() =>
     supabase
@@ -1029,7 +2079,6 @@ async function deleteTask(taskId) {
   if (!existing) return;
 
   state.tasks = state.tasks.filter((t) => t.id !== taskId);
-  // Remove any Done / Later Today history entries referencing the deleted task
   const keepEntry = (entry) =>
     entry.type === "complete"
       ? entry.taskId !== taskId
@@ -1037,13 +2086,13 @@ async function deleteTask(taskId) {
   state.undoStack = state.undoStack.filter(keepEntry);
   state.redoStack = state.redoStack.filter(keepEntry);
   saveTasksToCache();
-  renderAllVisibleViews({ animateEnter: true });
+  recomputePlanAndRender({ animateEnter: true, scheduleSync: true });
 
   await runSupabaseWrite(() => supabase.from("tasks").delete().eq("id", taskId));
 }
 
 // ============================================================================
-// MAIN SCREEN RENDERING
+// UI RENDERING: FOCUS TAB & TODAY'S MEALS STRIP
 // ============================================================================
 function starSvgMarkup() {
   return `
@@ -1055,14 +2104,26 @@ function starSvgMarkup() {
   `;
 }
 
+function syncMealsStripUI() {
+  const s = getSettings();
+  dom.mealsStrip.querySelectorAll(".meals-seg-btn").forEach((btn) => {
+    const active = Number(btn.dataset.mealsCount) === s.meals_per_day;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", String(active));
+  });
+
+  dom.selectMeal1Court.value = s.meal_1_court;
+  dom.selectMeal2Court.value = s.meal_2_court;
+  dom.selectMeal3Court.value = s.meal_3_court;
+  dom.meal3ChipWrap.hidden = s.meals_per_day !== 3;
+}
+
 function renderMain({ animateEnter = false } = {}) {
   const now = new Date();
   const focus = computeFocusState(now);
 
-  // Update header active count
   dom.allTasksCount.textContent = String(focus.activeCount);
 
-  // Update quiet context pill
   if (focus.gap.isGap) {
     dom.contextPill.classList.add("is-gap");
     dom.contextPillText.textContent = `${focus.gap.availableMinutes}m free before ${focus.gap.pillar.name} walk-out`;
@@ -1071,7 +2132,6 @@ function renderMain({ animateEnter = false } = {}) {
     dom.contextPillText.textContent = "Open Study Block";
   }
 
-  // Render card slot
   if (focus.mode === "empty") {
     dom.focusCardSlot.innerHTML = `
       <article class="focus-card state-card ${animateEnter ? "anim-enter" : ""}">
@@ -1107,13 +2167,10 @@ function renderMain({ animateEnter = false } = {}) {
       </article>
     `;
 
-    const bypassBtn = document.getElementById("btn-show-tasks-anyway");
-    if (bypassBtn) {
-      bypassBtn.addEventListener("click", () => {
-        state.bypassBreakGapKey = focus.gap.gapKey;
-        renderMain({ animateEnter: true });
-      });
-    }
+    document.getElementById("btn-show-tasks-anyway")?.addEventListener("click", () => {
+      state.bypassBreakGapKey = focus.gap.gapKey;
+      renderMain({ animateEnter: true });
+    });
     return;
   }
 
@@ -1175,7 +2232,299 @@ function renderMain({ animateEnter = false } = {}) {
 }
 
 // ============================================================================
-// HORIZONTAL PEEK CAROUSEL ("ALL TASKS")
+// UI RENDERING: DAY PLAN TAB (TIMELINE, SLEEP BANNERS, MOVE RUN, RE-FLOW)
+// ============================================================================
+function formatDayPlanHeaderLabel(dayPlan) {
+  if (dayPlan.offset === -1) return "Yesterday";
+  if (dayPlan.offset === 0) return "Today";
+  if (dayPlan.offset === 1) return "Tomorrow";
+  return dayPlan.date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric"
+  });
+}
+
+function maybeTriggerSleepOverloadAlert(todayPlan, forceOpen = false) {
+  if (!todayPlan || todayPlan.sleepStatus !== "overload" || todayPlan.overflowMinutes <= 0) {
+    return;
+  }
+  const s = getSettings();
+  const sig = `${todayPlan.dateKey}_${todayPlan.overflowMinutes}_${todayPlan.overflowTasks.map((x) => x.task.id).join(",")}`;
+  if (!forceOpen && state.dismissedOverloadSig === sig) return;
+
+  const hardBedtime = formatMinuteOfDay(todayPlan.hardBedMin);
+  const floorLabel = Number(s.min_sleep_hours) % 1 === 0 ? `${s.min_sleep_hours}` : s.min_sleep_hours.toFixed(1);
+
+  dom.sleepAlertMessage.textContent = `You have ${todayPlan.overflowMinutes}m more work than hours left before your ${floorLabel}-hour sleep cutoff (${hardBedtime}). Use AI to help break down or speed through your tasks tonight so you get adequate sleep!`;
+  dom.sleepAlertModal.dataset.overloadSig = sig;
+  dom.sleepAlertModal.hidden = false;
+}
+
+function renderDayPlan() {
+  if (!state.latestSevenDayPlan) {
+    state.latestSevenDayPlan = computeSevenDayPlan(new Date());
+  }
+
+  const dayPlan = state.latestSevenDayPlan.days[state.planDayOffset] || state.latestSevenDayPlan.days[0];
+  const s = getSettings();
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  // Ensure live dining hours are fetched for the viewed day
+  fetchDiningHoursForDate(dayPlan.dateKey);
+
+  // Update toolbar
+  dom.btnPlanDayLabel.textContent = formatDayPlanHeaderLabel(dayPlan);
+  dom.btnPlanPrev.disabled = state.planDayOffset <= -1;
+  dom.btnPlanNext.disabled = state.planDayOffset >= 6;
+
+  // Sleep Flex / Overload Banner
+  if (dayPlan.sleepStatus === "flexed") {
+    const prefLabel = Number(s.preferred_sleep_hours) % 1 === 0 ? `${s.preferred_sleep_hours}h` : `${s.preferred_sleep_hours.toFixed(1)}h`;
+    const actualStr = formatHoursAndMins(dayPlan.actualSleepMinutes);
+    dom.planSleepBanner.className = "plan-banner is-amber";
+    dom.planSleepBanner.innerHTML = `<span>Tight workload ${dayPlan.offset === 0 ? "today" : "this day"} — flexing sleep buffer from ${escapeHtml(prefLabel)} to ~${escapeHtml(actualStr)} so you finish on time.</span>`;
+    dom.planSleepBanner.hidden = false;
+  } else if (dayPlan.sleepStatus === "overload") {
+    dom.planSleepBanner.className = "plan-banner is-overload";
+    dom.planSleepBanner.innerHTML = `
+      <span><strong>Protect Your Sleep:</strong> ${dayPlan.overflowMinutes}m exceeds your ${s.min_sleep_hours}h sleep cutoff (${formatMinuteOfDay(dayPlan.hardBedMin)}).</span>
+      <button type="button" id="btn-open-sleep-alert" class="plan-banner-btn">Use AI Alert</button>
+    `;
+    dom.planSleepBanner.hidden = false;
+    document.getElementById("btn-open-sleep-alert")?.addEventListener("click", () => {
+      maybeTriggerSleepOverloadAlert(dayPlan, true);
+    });
+  } else {
+    dom.planSleepBanner.hidden = true;
+  }
+
+  // Render vertical timeline blocks
+  dom.planTimelineList.innerHTML = "";
+  const frag = document.createDocumentFragment();
+
+  // Dynamic Wake-Up Marker
+  const wakeMarker = document.createElement("div");
+  wakeMarker.className = "plan-wake-marker";
+  wakeMarker.innerHTML = `
+    <span>Wake up · ${formatMinuteOfDay(dayPlan.wakeMin)}</span>
+    <span class="plan-wake-line"></span>
+  `;
+  frag.appendChild(wakeMarker);
+
+  let prevBlock = null;
+  for (const block of dayPlan.blocks) {
+    // Show subtle breathing gap label when two consecutive study blocks have a 15m breathing gap
+    if (
+      prevBlock &&
+      prevBlock.eventType === "study" &&
+      block.eventType === "study" &&
+      block.startMin - prevBlock.endMin >= 10
+    ) {
+      const gapEl = document.createElement("div");
+      gapEl.className = "plan-gap-pill";
+      gapEl.textContent = `${block.startMin - prevBlock.endMin}m breathing break`;
+      frag.appendChild(gapEl);
+    }
+
+    const card = document.createElement("article");
+    const isPast = dayPlan.offset === 0 && block.endMin <= nowMin && block.eventType !== "sleep";
+
+    let typeClass = "plan-card-class";
+    if (block.eventType === "meal") typeClass = "plan-card-meal";
+    else if (block.eventType === "run") typeClass = "plan-card-run";
+    else if (block.eventType === "shower") typeClass = "plan-card-shower";
+    else if (block.eventType === "sleep") typeClass = "plan-card-sleep";
+    else if (block.eventType === "study") {
+      typeClass = block.isPersonal ? "plan-card-personal" : "plan-card-academic";
+    }
+
+    card.className = `plan-card ${typeClass} ${block.isStarred ? "is-starred-plan" : ""} ${isPast ? "is-past" : ""}`;
+
+    const rightControlHtml =
+      block.eventType === "run"
+        ? `<button type="button" class="plan-move-run-btn" data-move-run-offset="${block.dayOffset}">Move Run</button>`
+        : block.badge
+          ? `<span class="plan-tag">${escapeHtml(block.badge)}</span>`
+          : "";
+
+    card.innerHTML = `
+      <div class="plan-card-time">
+        <span>${formatMinuteOfDay(block.startMin)}</span>
+        <span class="plan-card-end">${formatMinuteOfDay(block.endMin)}</span>
+      </div>
+      <div class="plan-card-body">
+        <div class="plan-card-top">
+          <h4 class="plan-card-title">${block.isStarred ? "★ " : ""}${escapeHtml(block.title)}</h4>
+          ${rightControlHtml}
+        </div>
+        ${block.meta ? `<div class="plan-card-meta">${escapeHtml(block.meta)}</div>` : ""}
+      </div>
+    `;
+
+    if (block.eventType === "study" && block.task) {
+      card.addEventListener("click", () => {
+        openTaskModal(block.task);
+      });
+    }
+
+    if (block.eventType === "run") {
+      card.querySelector(".plan-move-run-btn")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openMoveRunModal(block.dayOffset);
+      });
+    }
+
+    frag.appendChild(card);
+    prevBlock = block;
+  }
+
+  // Render Overflow Tasks card section if tasks exceed 7h sleep cutoff
+  if (dayPlan.overflowTasks && dayPlan.overflowTasks.length > 0) {
+    const overflowSection = document.createElement("section");
+    overflowSection.id = "plan-overflow-section";
+    overflowSection.className = `plan-overflow-section ${state.highlightOverflow ? "is-highlighted" : ""}`;
+    overflowSection.innerHTML = `
+      <div class="plan-overflow-header">
+        <h4>Past 7h Sleep Cutoff (${dayPlan.overflowMinutes}m overflow)</h4>
+      </div>
+    `;
+
+    for (const item of dayPlan.overflowTasks) {
+      const row = document.createElement("div");
+      row.className = "plan-overflow-item";
+      row.innerHTML = `
+        <div class="plan-overflow-info">
+          <div class="plan-overflow-title">${escapeHtml(item.task.title)}</div>
+          <div class="plan-overflow-meta">${escapeHtml(item.task.course)} · ${formatDuration(item.remainingMinutes)} left</div>
+        </div>
+        <button type="button" class="plan-overflow-defer-btn">Edit / Defer</button>
+      `;
+      row.querySelector(".plan-overflow-defer-btn").addEventListener("click", () => {
+        openTaskModal(item.task);
+      });
+      overflowSection.appendChild(row);
+    }
+
+    frag.appendChild(overflowSection);
+  }
+
+  dom.planTimelineList.appendChild(frag);
+}
+
+function openMoveRunModal(sourceOffset) {
+  if (!state.latestSevenDayPlan) return;
+  state.moveRunSourceOffset = sourceOffset;
+  dom.moveRunDaysList.innerHTML = "";
+
+  for (let offset = 0; offset <= 6; offset++) {
+    if (offset === sourceOffset) continue;
+    const dayPlan = state.latestSevenDayPlan.days[offset];
+    if (!dayPlan || dayPlan.hasRun) continue;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "move-run-option";
+    const label = `${DAY_SHORT_NAMES[dayPlan.date.getDay()]}, ${dayPlan.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    const loadDesc = dayPlan.classCount === 0 ? "No classes" : `${dayPlan.classCount} ${dayPlan.classCount === 1 ? "class" : "classes"}`;
+    btn.innerHTML = `<span>${escapeHtml(label)}</span><small>${escapeHtml(loadDesc)}</small>`;
+
+    btn.addEventListener("click", async () => {
+      const sourceDay = state.latestSevenDayPlan.days[sourceOffset];
+      const sourceDow = sourceDay.date.getDay();
+      const targetDow = dayPlan.date.getDay();
+
+      // Update preferred_run_days so this move persists across sessions and syncs to Supabase
+      const currentDows = new Set(
+        Array.from(state.latestSevenDayPlan.runDayOffsets).map((off) => state.latestSevenDayPlan.days[off].date.getDay())
+      );
+      currentDows.delete(sourceDow);
+      currentDows.add(targetDow);
+
+      dom.moveRunModal.hidden = true;
+      state.moveRunSourceOffset = null;
+      await saveUserSettings(
+        { preferred_run_days: Array.from(currentDows).sort((a, b) => a - b) },
+        { silentToast: true }
+      );
+      state.planDayOffset = offset;
+      renderDayPlan();
+      showToast(`Run moved to ${label}`);
+    });
+
+    dom.moveRunDaysList.appendChild(btn);
+  }
+
+  if (dom.moveRunDaysList.children.length === 0) {
+    showToast("All days this week already have a run scheduled");
+    return;
+  }
+
+  dom.moveRunModal.hidden = false;
+}
+
+function handleReflowFromNow() {
+  const now = new Date();
+  const todayKey = toLocalDateKey(now);
+  const rawMin = now.getHours() * 60 + now.getMinutes();
+  const roundedUp = Math.ceil(rawMin / 5) * 5;
+
+  state.reflowAnchorDateKey = todayKey;
+  state.reflowAnchorMin = roundedUp;
+  state.planDayOffset = 0;
+
+  recomputePlanAndRender({ scheduleSync: true, checkOverloadModal: true });
+  showToast(`Re-flowed from ${formatMinuteOfDay(roundedUp)}`);
+}
+
+function setActiveTab(tabName) {
+  state.activeTab = tabName === "plan" ? "plan" : "focus";
+  const isFocus = state.activeTab === "focus";
+
+  dom.tabFocusPanel.hidden = !isFocus;
+  dom.tabPlanPanel.hidden = isFocus;
+
+  dom.tabBtnFocus.classList.toggle("is-active", isFocus);
+  dom.tabBtnFocus.setAttribute("aria-selected", String(isFocus));
+  dom.tabBtnPlan.classList.toggle("is-active", !isFocus);
+  dom.tabBtnPlan.setAttribute("aria-selected", String(!isFocus));
+
+  if (!isFocus) {
+    renderDayPlan();
+    const todayPlan = state.latestSevenDayPlan?.days[0];
+    if (state.planDayOffset === 0 && todayPlan?.sleepStatus === "overload") {
+      maybeTriggerSleepOverloadAlert(todayPlan, false);
+    }
+  }
+}
+
+function recomputePlanAndRender({ animateEnter = false, scheduleSync = false, checkOverloadModal = false } = {}) {
+  state.latestSevenDayPlan = computeSevenDayPlan(new Date());
+  renderMain({ animateEnter });
+  updateHistoryButtons();
+
+  if (state.activeTab === "plan") {
+    renderDayPlan();
+  }
+  if (!dom.carouselView.hidden) {
+    renderCarousel(state.carouselCenteredIndex);
+  }
+  if (!dom.settingsView.hidden) {
+    renderPillarsList();
+  }
+
+  if (scheduleSync) {
+    schedulePlannedEventsSync();
+  }
+
+  if (checkOverloadModal && state.latestSevenDayPlan?.days[0]?.sleepStatus === "overload") {
+    maybeTriggerSleepOverloadAlert(state.latestSevenDayPlan.days[0], false);
+  }
+}
+
+// ============================================================================
+// HORIZONTAL PEEK CAROUSEL ("ALL TASKS") — V1 PRESERVED
 // ============================================================================
 function renderCarousel(preserveScrollIndex = null) {
   const now = new Date();
@@ -1283,7 +2632,6 @@ function updateCarouselCardTransforms() {
     const step = Math.max(1, cardRect.width + 12);
     const t = Math.min(1, dist / step);
 
-    // Smooth interpolation: scale 1.0 -> 0.84, opacity 1.0 -> 0.5
     const scale = 1 - 0.16 * t;
     const opacity = 1 - 0.5 * t;
 
@@ -1321,7 +2669,7 @@ function closeCarouselView() {
 // 3-TAP QUICK ADD & EDIT TASK MODAL
 // ============================================================================
 let modalCourse = "Personal";
-let modalDuePreset = "today"; // "today" | "tomorrow" | "pick"
+let modalDuePreset = "today";
 let modalDuration = 30;
 
 function setActivePill(container, attrName, value) {
@@ -1341,8 +2689,7 @@ function resetDeleteButton() {
 function openTaskModal(taskToEdit = null) {
   const now = new Date();
   const todayKey = toLocalDateKey(now);
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const tomorrowKey = toLocalDateKey(tomorrow);
+  const tomorrowKey = toLocalDateKey(addLocalDays(now, 1));
 
   dom.taskFormError.hidden = true;
   resetDeleteButton();
@@ -1354,7 +2701,6 @@ function openTaskModal(taskToEdit = null) {
     dom.btnDeleteTask.hidden = false;
 
     dom.taskTitleInput.value = taskToEdit.title;
-
     modalCourse = taskToEdit.course || "Personal";
     setActivePill(dom.taskCoursePills, "data-course", modalCourse);
 
@@ -1392,7 +2738,6 @@ function openTaskModal(taskToEdit = null) {
     dom.btnDeleteTask.hidden = true;
 
     dom.taskTitleInput.value = "";
-
     modalCourse = "Personal";
     setActivePill(dom.taskCoursePills, "data-course", modalCourse);
 
@@ -1426,10 +2771,43 @@ function closeTaskModal() {
 }
 
 // ============================================================================
-// SETTINGS VIEW (WEEKLY CLASS PILLARS & ACCOUNT)
+// SETTINGS VIEW (CALENDAR .ICS, MEALS, SLEEP/RUNS, CLASS PILLARS)
 // ============================================================================
 let pillarBuffer = 15;
 let pillarDays = new Set([1, 3, 5]);
+let settingsRunDaysSet = new Set([3, 6]);
+
+function populateSettingsUI() {
+  const s = getSettings();
+  dom.settingsUserEmail.textContent = state.user?.email || "Signed in";
+  dom.settingsIcsUrl.value = `${EDGE_FUNCTION_URL}?action=calendar&token=${s.ics_token}`;
+
+  dom.setMeal1Start.value = s.meal_1_window_start;
+  dom.setMeal1End.value = s.meal_1_window_end;
+  dom.setMeal2Start.value = s.meal_2_window_start;
+  dom.setMeal2End.value = s.meal_2_window_end;
+  dom.setMeal3Start.value = s.meal_3_window_start;
+  dom.setMeal3End.value = s.meal_3_window_end;
+
+  dom.setPrefSleep.value = String(s.preferred_sleep_hours);
+  dom.setMinSleep.value = String(s.min_sleep_hours);
+  dom.setEveningShower.value = String(s.evening_shower_minutes);
+  dom.setNoClassWake.value = s.no_class_wake_time;
+  dom.setRunsPerWeek.value = String(s.runs_per_week);
+
+  settingsRunDaysSet = new Set(s.preferred_run_days || [3, 6]);
+  syncSettingsRunDayButtons();
+  dom.wellnessFormError.hidden = true;
+}
+
+function syncSettingsRunDayButtons() {
+  dom.settingsRunDays.querySelectorAll("[data-run-day]").forEach((btn) => {
+    const d = Number(btn.dataset.runDay);
+    const active = settingsRunDaysSet.has(d);
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", String(active));
+  });
+}
 
 function resetPillarForm() {
   state.editingPillarId = null;
@@ -1482,7 +2860,7 @@ function populatePillarFormForEdit(pillar) {
 function renderPillarsList() {
   if (state.pillars.length === 0) {
     dom.pillarsList.innerHTML = `
-      <div class="pillar-empty">No recurring classes yet. Add your weekly classes below to enable between-class gap detection.</div>
+      <div class="pillar-empty">No recurring classes yet. Add your weekly classes below to enable gap detection and dynamic wake-up times.</div>
     `;
     return;
   }
@@ -1530,7 +2908,7 @@ function renderPillarsList() {
       if (state.editingPillarId === pillar.id) resetPillarForm();
       savePillarsToCache();
       renderPillarsList();
-      renderMain();
+      recomputePlanAndRender({ scheduleSync: true });
       await runSupabaseWrite(() => supabase.from("class_pillars").delete().eq("id", pillar.id));
     });
 
@@ -1539,7 +2917,7 @@ function renderPillarsList() {
 }
 
 function openSettingsView() {
-  dom.settingsUserEmail.textContent = state.user?.email || "Signed in";
+  populateSettingsUI();
   renderPillarsList();
   resetPillarForm();
   dom.settingsView.hidden = false;
@@ -1547,17 +2925,6 @@ function openSettingsView() {
 
 function closeSettingsView() {
   dom.settingsView.hidden = true;
-}
-
-function renderAllVisibleViews({ animateEnter = false } = {}) {
-  renderMain({ animateEnter });
-  updateHistoryButtons();
-  if (!dom.carouselView.hidden) {
-    renderCarousel(state.carouselCenteredIndex);
-  }
-  if (!dom.settingsView.hidden) {
-    renderPillarsList();
-  }
 }
 
 // ============================================================================
@@ -1574,6 +2941,8 @@ function showAuthView() {
   closeCarouselView();
   closeSettingsView();
   dom.lateModal.hidden = true;
+  dom.sleepAlertModal.hidden = true;
+  dom.moveRunModal.hidden = true;
 }
 
 async function initAuthAndSync() {
@@ -1586,7 +2955,8 @@ async function initAuthAndSync() {
       state.user = session.user;
       saveUserToCache(session.user);
       showAppView();
-      renderMain();
+      syncMealsStripUI();
+      recomputePlanAndRender();
       syncFromSupabase();
     } else {
       state.user = null;
@@ -1596,10 +2966,10 @@ async function initAuthAndSync() {
   } catch (err) {
     console.error("Auth session check error:", err);
     if (state.user) {
-      // Offline with cached user -> keep local-first UI running
       setSyncStatus("offline");
       showAppView();
-      renderMain();
+      syncMealsStripUI();
+      recomputePlanAndRender();
     } else {
       showAuthView();
     }
@@ -1610,6 +2980,7 @@ async function initAuthAndSync() {
       state.user = null;
       state.tasks = [];
       state.pillars = [];
+      state.userSettings = null;
       state.undoStack = [];
       state.redoStack = [];
       clearAllCache();
@@ -1649,7 +3020,8 @@ function bindEvents() {
       saveUserToCache(data.user);
       dom.authPassword.value = "";
       showAppView();
-      renderMain();
+      syncMealsStripUI();
+      recomputePlanAndRender();
       await syncFromSupabase();
     } catch (err) {
       dom.authError.textContent = err?.message || "Invalid email or password.";
@@ -1668,6 +3040,51 @@ function bindEvents() {
   dom.btnUndo.addEventListener("click", handleUndo);
   dom.btnRedo.addEventListener("click", handleRedo);
 
+  // Bottom 2-Tab Navigation
+  dom.tabBtnFocus.addEventListener("click", () => setActiveTab("focus"));
+  dom.tabBtnPlan.addEventListener("click", () => setActiveTab("plan"));
+
+  // Focus Tab: Today's Meals Strip (2 Meals | 3 Meals & Dining Court selectors)
+  dom.mealsStrip.addEventListener("click", (e) => {
+    const seg = e.target.closest("[data-meals-count]");
+    if (!seg) return;
+    const count = Number(seg.dataset.mealsCount) === 3 ? 3 : 2;
+    if (getSettings().meals_per_day === count) return;
+    saveUserSettings({ meals_per_day: count }, { silentToast: true });
+    showToast(`${count} meals scheduled`);
+  });
+
+  dom.selectMeal1Court.addEventListener("change", () => {
+    saveUserSettings({ meal_1_court: dom.selectMeal1Court.value }, { silentToast: true });
+  });
+  dom.selectMeal2Court.addEventListener("change", () => {
+    saveUserSettings({ meal_2_court: dom.selectMeal2Court.value }, { silentToast: true });
+  });
+  dom.selectMeal3Court.addEventListener("change", () => {
+    saveUserSettings({ meal_3_court: dom.selectMeal3Court.value }, { silentToast: true });
+  });
+
+  // Day Plan Navigation & Re-flow from Now
+  dom.btnPlanPrev.addEventListener("click", () => {
+    if (state.planDayOffset > -1) {
+      state.planDayOffset -= 1;
+      state.highlightOverflow = false;
+      renderDayPlan();
+    }
+  });
+  dom.btnPlanNext.addEventListener("click", () => {
+    if (state.planDayOffset < 6) {
+      state.planDayOffset += 1;
+      state.highlightOverflow = false;
+      renderDayPlan();
+    }
+  });
+  dom.btnPlanDayLabel.addEventListener("click", () => {
+    state.planDayOffset = 0;
+    renderDayPlan();
+  });
+  dom.btnReflowNow.addEventListener("click", handleReflowFromNow);
+
   // Carousel Overlay
   dom.btnCarouselClose.addEventListener("click", closeCarouselView);
   dom.btnCarouselAdd.addEventListener("click", () => openTaskModal(null));
@@ -1676,7 +3093,6 @@ function bindEvents() {
     if (!dom.carouselView.hidden) scheduleCarouselUpdate();
   });
 
-  // Allow vertical mouse wheel on desktop to scroll carousel horizontally
   dom.carouselStage.addEventListener(
     "wheel",
     (e) => {
@@ -1693,6 +3109,73 @@ function bindEvents() {
   dom.btnPillarCancel.addEventListener("click", resetPillarForm);
   dom.btnSyncNow.addEventListener("click", () => syncFromSupabase(true));
 
+  // Settings: Copy iPhone Calendar .ics Link
+  dom.btnCopyIcs.addEventListener("click", async () => {
+    const url = dom.settingsIcsUrl.value;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        dom.settingsIcsUrl.select();
+        document.execCommand("copy");
+      }
+      showToast("Calendar link copied!");
+    } catch (_) {
+      dom.settingsIcsUrl.select();
+      showToast("Tap and copy the link above");
+    }
+  });
+
+  // Settings: Meal Windows Save
+  dom.mealsSettingsForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await saveUserSettings({
+      meal_1_window_start: dom.setMeal1Start.value || "10:30",
+      meal_1_window_end: dom.setMeal1End.value || "14:30",
+      meal_2_window_start: dom.setMeal2Start.value || "16:30",
+      meal_2_window_end: dom.setMeal2End.value || "20:30",
+      meal_3_window_start: dom.setMeal3Start.value || "19:30",
+      meal_3_window_end: dom.setMeal3End.value || "22:00"
+    });
+  });
+
+  // Settings: Preferred Run Days toggle
+  dom.settingsRunDays.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-run-day]");
+    if (!btn) return;
+    const d = Number(btn.dataset.runDay);
+    if (settingsRunDaysSet.has(d)) settingsRunDaysSet.delete(d);
+    else settingsRunDaysSet.add(d);
+    syncSettingsRunDayButtons();
+  });
+
+  // Settings: Sleep, Showers & Runs Save
+  dom.wellnessSettingsForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    dom.wellnessFormError.hidden = true;
+
+    const prefSleep = parseFloat(dom.setPrefSleep.value);
+    const minSleep = parseFloat(dom.setMinSleep.value);
+    const showerMin = parseInt(dom.setEveningShower.value, 10);
+    const noClassWake = dom.setNoClassWake.value || "08:30";
+    const runsPerWeek = parseInt(dom.setRunsPerWeek.value, 10);
+
+    if (!Number.isFinite(prefSleep) || !Number.isFinite(minSleep) || minSleep > prefSleep) {
+      dom.wellnessFormError.textContent = "Minimum sleep must be less than or equal to preferred sleep.";
+      dom.wellnessFormError.hidden = false;
+      return;
+    }
+
+    await saveUserSettings({
+      preferred_sleep_hours: prefSleep,
+      min_sleep_hours: minSleep,
+      evening_shower_minutes: Number.isFinite(showerMin) ? showerMin : 40,
+      no_class_wake_time: noClassWake,
+      runs_per_week: Number.isFinite(runsPerWeek) ? runsPerWeek : 2,
+      preferred_run_days: Array.from(settingsRunDaysSet).sort((a, b) => a - b)
+    });
+  });
+
   dom.btnSignOut.addEventListener("click", async () => {
     dom.btnSignOut.disabled = true;
     try {
@@ -1703,6 +3186,7 @@ function bindEvents() {
       state.user = null;
       state.tasks = [];
       state.pillars = [];
+      state.userSettings = null;
       state.undoStack = [];
       state.redoStack = [];
       clearAllCache();
@@ -1723,11 +3207,8 @@ function bindEvents() {
     const btn = e.target.closest(".day-pill");
     if (!btn) return;
     const day = Number(btn.dataset.day);
-    if (pillarDays.has(day)) {
-      pillarDays.delete(day);
-    } else {
-      pillarDays.add(day);
-    }
+    if (pillarDays.has(day)) pillarDays.delete(day);
+    else pillarDays.add(day);
     syncPillarDayButtons();
   });
 
@@ -1780,7 +3261,7 @@ function bindEvents() {
         savePillarsToCache();
         resetPillarForm();
         renderPillarsList();
-        renderMain();
+        recomputePlanAndRender({ scheduleSync: true });
         showToast("Class updated");
 
         await runSupabaseWrite(() =>
@@ -1812,7 +3293,7 @@ function bindEvents() {
       savePillarsToCache();
       resetPillarForm();
       renderPillarsList();
-      renderMain();
+      recomputePlanAndRender({ scheduleSync: true });
       showToast("Class added");
 
       await runSupabaseWrite(() => supabase.from("class_pillars").insert(newPillar));
@@ -1898,8 +3379,7 @@ function bindEvents() {
     if (modalDuePreset === "today") {
       dateKey = toLocalDateKey(now);
     } else if (modalDuePreset === "tomorrow") {
-      const tmr = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      dateKey = toLocalDateKey(tmr);
+      dateKey = toLocalDateKey(addLocalDays(now, 1));
     } else {
       dateKey = dom.taskDateInput.value;
       if (!dateKey) {
@@ -1941,19 +3421,51 @@ function bindEvents() {
     state.pendingLatePlan = null;
     dom.lateModal.hidden = true;
   });
-
   dom.lateModal.addEventListener("click", (e) => {
     if (e.target === dom.lateModal) {
       state.pendingLatePlan = null;
       dom.lateModal.hidden = true;
     }
   });
-
   dom.btnLateProceed.addEventListener("click", () => {
     const plan = state.pendingLatePlan;
     state.pendingLatePlan = null;
     dom.lateModal.hidden = true;
     if (plan) executeLaterTodayPlan(plan);
+  });
+
+  // Protect Your Sleep — Use AI Tonight Modal
+  dom.btnSleepGotIt.addEventListener("click", () => {
+    state.dismissedOverloadSig = dom.sleepAlertModal.dataset.overloadSig || null;
+    dom.sleepAlertModal.hidden = true;
+  });
+  dom.sleepAlertModal.addEventListener("click", (e) => {
+    if (e.target === dom.sleepAlertModal) {
+      state.dismissedOverloadSig = dom.sleepAlertModal.dataset.overloadSig || null;
+      dom.sleepAlertModal.hidden = true;
+    }
+  });
+  dom.btnSleepViewOverflow.addEventListener("click", () => {
+    state.dismissedOverloadSig = dom.sleepAlertModal.dataset.overloadSig || null;
+    dom.sleepAlertModal.hidden = true;
+    state.planDayOffset = 0;
+    state.highlightOverflow = true;
+    setActiveTab("plan");
+    requestAnimationFrame(() => {
+      document.getElementById("plan-overflow-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+
+  // Move Run Modal
+  dom.btnMoveRunCancel.addEventListener("click", () => {
+    state.moveRunSourceOffset = null;
+    dom.moveRunModal.hidden = true;
+  });
+  dom.moveRunModal.addEventListener("click", (e) => {
+    if (e.target === dom.moveRunModal) {
+      state.moveRunSourceOffset = null;
+      dom.moveRunModal.hidden = true;
+    }
   });
 
   // Prevent pinch-to-zoom and Ctrl/Cmd browser zoom
@@ -1985,16 +3497,19 @@ function bindEvents() {
   // Global Keyboard Shortcuts (Edge / Desktop)
   window.addEventListener("keydown", (e) => {
     const tag = document.activeElement?.tagName;
-    const isTyping = tag === "INPUT" || tag === "TEXTAREA";
+    const isTyping = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 
-    // Block keyboard zoom shortcuts (Ctrl/Cmd + '+', '-', '=', '0')
     if ((e.ctrlKey || e.metaKey) && ["+", "=", "-", "_", "0"].includes(e.key)) {
       e.preventDefault();
       return;
     }
 
     if (e.key === "Escape") {
-      if (!dom.lateModal.hidden) {
+      if (!dom.moveRunModal.hidden) {
+        dom.moveRunModal.hidden = true;
+      } else if (!dom.sleepAlertModal.hidden) {
+        dom.sleepAlertModal.hidden = true;
+      } else if (!dom.lateModal.hidden) {
         state.pendingLatePlan = null;
         dom.lateModal.hidden = true;
       } else if (!dom.taskModal.hidden) {
@@ -2040,7 +3555,7 @@ function bindEvents() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && state.user) {
-      renderAllVisibleViews();
+      recomputePlanAndRender();
       syncFromSupabase();
     }
   });
@@ -2063,16 +3578,20 @@ function boot() {
   // 1. Synchronous instant render from localStorage (< 0.2s boot, zero spinners)
   loadCacheFromStorage();
   bindEvents();
+  syncMealsStripUI();
   if (state.user) {
     showAppView();
-    renderMain();
+    recomputePlanAndRender();
   }
   updateHistoryButtons();
 
-  // 2. Refresh time-dependent UI (midnight rollover & between-class countdowns) every 30s
+  // 2. Refresh time-dependent UI every 30s
   setInterval(() => {
     if (state.user && !state.isAnimatingCard) {
       renderMain();
+      if (state.activeTab === "plan") {
+        renderDayPlan();
+      }
     }
   }, 30000);
 

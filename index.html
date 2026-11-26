@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#5D71BF" />
-  <meta name="description" content="FocusDeck — Calm, mobile-first ADHD task and focus assistant." />
+  <meta name="description" content="FocusDeck — Calm, mobile-first ADHD task, focus, and daily planner assistant." />
 
   <!-- iOS PWA / Standalone Meta -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -52,7 +52,7 @@
           </svg>
         </div>
         <h1>FocusDeck</h1>
-        <p class="auth-subtitle">Sign in once to keep your tasks and class schedule synced across devices.</p>
+        <p class="auth-subtitle">Sign in once to keep your tasks, meals, and daily plan synced across devices.</p>
       </div>
 
       <form id="auth-form" class="auth-form" novalidate>
@@ -89,7 +89,7 @@
   </section>
 
   <!-- =======================================================================
-       2. MAIN FOCUS APPLICATION SHELL
+       2. MAIN APPLICATION SHELL (2-TAB: FOCUS | DAY PLAN)
        ======================================================================= -->
   <div id="app-view" class="app-view">
     <!-- Top Header Bar -->
@@ -126,38 +126,128 @@
       </div>
     </header>
 
-    <!-- Single Focus Card Stage -->
-    <main class="focus-stage" aria-live="polite">
-      <!-- Quiet Context Pill -->
-      <div id="context-pill" class="context-pill">
-        <span class="context-dot" aria-hidden="true"></span>
-        <span id="context-pill-text">Open Study Block</span>
+    <!-- =====================================================================
+         TAB 1: FOCUS (SINGLE FLASHCARD + TODAY'S MEALS STRIP + UNDO/REDO)
+         ===================================================================== -->
+    <div id="tab-focus-panel" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-focus">
+      <main class="focus-stage" aria-live="polite">
+        <!-- Quiet Context Pill -->
+        <div id="context-pill" class="context-pill">
+          <span class="context-dot" aria-hidden="true"></span>
+          <span id="context-pill-text">Open Study Block</span>
+        </div>
+
+        <!-- Compact Low-Profile Today's Meals Strip -->
+        <section id="meals-strip" class="meals-strip" aria-label="Today's meals and dining courts">
+          <div class="meals-segmented" role="group" aria-label="Meals per day">
+            <button type="button" class="meals-seg-btn is-active" data-meals-count="2" aria-pressed="true">2 Meals</button>
+            <button type="button" class="meals-seg-btn" data-meals-count="3" aria-pressed="false">3 Meals</button>
+          </div>
+
+          <div id="meals-courts-row" class="meals-courts-row">
+            <label class="meal-court-chip">
+              <span class="meal-chip-tag">M1</span>
+              <select id="select-meal-1-court" aria-label="Meal 1 dining court">
+                <option value="Wiley">Wiley</option>
+                <option value="Ford">Ford</option>
+                <option value="Earhart">Earhart</option>
+                <option value="Windsor">Windsor</option>
+                <option value="Hillenbrand">Hillenbrand</option>
+                <option value="Off-Campus">Off-Campus</option>
+              </select>
+            </label>
+
+            <label class="meal-court-chip">
+              <span class="meal-chip-tag">M2</span>
+              <select id="select-meal-2-court" aria-label="Meal 2 dining court">
+                <option value="Wiley">Wiley</option>
+                <option value="Ford">Ford</option>
+                <option value="Earhart">Earhart</option>
+                <option value="Windsor">Windsor</option>
+                <option value="Hillenbrand">Hillenbrand</option>
+                <option value="Off-Campus">Off-Campus</option>
+              </select>
+            </label>
+
+            <label id="meal-3-chip-wrap" class="meal-court-chip" hidden>
+              <span class="meal-chip-tag">M3</span>
+              <select id="select-meal-3-court" aria-label="Meal 3 dining court">
+                <option value="Wiley">Wiley</option>
+                <option value="Ford">Ford</option>
+                <option value="Earhart">Earhart</option>
+                <option value="Windsor">Windsor</option>
+                <option value="Hillenbrand">Hillenbrand</option>
+                <option value="Off-Campus">Off-Campus</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <!-- Dynamic Focus Card Container -->
+        <div id="focus-card-slot" class="focus-card-slot"></div>
+      </main>
+
+      <!-- Permanent Compact Undo / Redo Bar (Done & Later Today only) -->
+      <div class="bottom-controls">
+        <div class="history-bar" role="group" aria-label="Undo and Redo">
+          <button id="btn-undo" type="button" class="history-btn" disabled title="Undo (Ctrl+Z)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 14L4 9l5-5"></path>
+              <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
+            </svg>
+            <span>Undo</span>
+          </button>
+          <span class="history-divider" aria-hidden="true"></span>
+          <button id="btn-redo" type="button" class="history-btn" disabled title="Redo (Ctrl+Y)">
+            <span>Redo</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 14l5-5-5-5"></path>
+              <path d="M4 20v-7a4 4 0 0 1 4-4h12"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         TAB 2: DAY PLAN (CALM ANTI-FATIGUE SINGLE-DAY TIMELINE)
+         ===================================================================== -->
+    <div id="tab-plan-panel" class="tab-panel tab-panel-plan" role="tabpanel" aria-labelledby="tab-btn-plan" hidden>
+      <!-- Day Navigation & Re-flow Bar -->
+      <div class="plan-toolbar">
+        <div class="day-nav" role="group" aria-label="Navigate day">
+          <button id="btn-plan-prev" type="button" class="day-nav-arrow" aria-label="Previous day" title="Previous day">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <button id="btn-plan-day-label" type="button" class="day-nav-label" title="Jump to Today">
+            Today
+          </button>
+          <button id="btn-plan-next" type="button" class="day-nav-arrow" aria-label="Next day" title="Next day">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+
+        <button id="btn-reflow-now" type="button" class="reflow-btn" title="Re-slot remaining tasks and meals starting from right now">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+          <span>Re-flow from Now</span>
+        </button>
       </div>
 
-      <!-- Dynamic Focus Card Container -->
-      <div id="focus-card-slot" class="focus-card-slot"></div>
-    </main>
+      <!-- Optional Sleep Flex / Overload Banner -->
+      <div id="plan-sleep-banner" class="plan-banner" hidden></div>
 
-    <!-- Permanent Compact Undo / Redo Bar -->
-    <footer class="bottom-controls">
-      <div class="history-bar" role="group" aria-label="Undo and Redo">
-        <button id="btn-undo" type="button" class="history-btn" disabled title="Undo (Ctrl+Z)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M9 14L4 9l5-5"></path>
-            <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
-          </svg>
-          <span>Undo</span>
-        </button>
-        <span class="history-divider" aria-hidden="true"></span>
-        <button id="btn-redo" type="button" class="history-btn" disabled title="Redo (Ctrl+Y)">
-          <span>Redo</span>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M15 14l5-5-5-5"></path>
-            <path d="M4 20v-7a4 4 0 0 1 4-4h12"></path>
-          </svg>
-        </button>
+      <!-- Scrollable Single-Day Timeline -->
+      <div id="plan-timeline-scroll" class="plan-timeline-scroll">
+        <div id="plan-timeline-list" class="plan-timeline-list"></div>
       </div>
-    </footer>
+    </div>
 
     <!-- Floating Add Button -->
     <button
@@ -172,6 +262,27 @@
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
     </button>
+
+    <!-- Clean 2-Tab Bottom Navigation Bar -->
+    <nav class="bottom-tabs" role="tablist" aria-label="Main navigation">
+      <button id="tab-btn-focus" type="button" class="bottom-tab is-active" role="tab" aria-selected="true" aria-controls="tab-focus-panel">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="4" y="5" width="16" height="14" rx="3"></rect>
+          <path d="M9 12l2 2 4-4"></path>
+        </svg>
+        <span>Focus</span>
+      </button>
+
+      <button id="tab-btn-plan" type="button" class="bottom-tab" role="tab" aria-selected="false" aria-controls="tab-plan-panel">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="3"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        <span>Day Plan</span>
+      </button>
+    </nav>
   </div>
 
   <!-- =======================================================================
@@ -209,7 +320,7 @@
   </section>
 
   <!-- =======================================================================
-       4. SETTINGS VIEW (WEEKLY CLASS PILLARS & ACCOUNT)
+       4. SETTINGS VIEW (COLLAPSIBLE SECTIONS + .ICS + MEALS + SLEEP + PILLARS)
        ======================================================================= -->
   <section id="settings-view" class="overlay-view" aria-label="Settings" hidden>
     <header class="overlay-header">
@@ -227,77 +338,226 @@
     </header>
 
     <div class="settings-content">
-      <!-- Weekly Class Pillars Section -->
-      <section class="settings-section">
-        <div class="section-heading">
-          <h3>Weekly Class Pillars</h3>
-          <p>Used to spot between-class gaps and calculate walk-out times.</p>
-        </div>
-
-        <div id="pillars-list" class="pillars-list"></div>
-
-        <form id="pillar-form" class="pillar-form-card" novalidate>
-          <div class="pillar-form-header">
-            <h4 id="pillar-form-title">Add Class</h4>
-            <button id="btn-pillar-cancel" type="button" class="text-btn" hidden>Cancel edit</button>
+      <!-- 1. iPhone Calendar Subscription -->
+      <details class="settings-accordion" open>
+        <summary class="settings-accordion-summary">
+          <div>
+            <h3>iPhone Calendar Subscription</h3>
+            <p>Live .ics feed of meals, runs, study blocks, showers, and sleep</p>
           </div>
+          <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </summary>
+        <div class="settings-accordion-body">
+          <div class="ics-box">
+            <input id="settings-ics-url" type="text" readonly aria-label="Personal iPhone Calendar subscription URL" />
+            <button id="btn-copy-ics" type="button" class="btn btn-primary btn-full">
+              Copy Calendar Link
+            </button>
+          </div>
+          <p class="settings-help-note">
+            <strong>How to subscribe:</strong> iPhone Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, then paste this link.
+          </p>
+          <p class="settings-help-note is-muted">
+            Classes are intentionally excluded from this feed so they never duplicate your existing Apple Calendar schedule.
+          </p>
+        </div>
+      </details>
 
-          <div class="field-group">
-            <label for="pillar-name-input">Class Name</label>
-            <input
-              id="pillar-name-input"
-              type="text"
-              placeholder="e.g., CHM 11510"
-              maxlength="80"
-              required
-            />
-            <div class="pill-row" id="pillar-course-pills" role="group" aria-label="Quick-fill class name">
-              <button type="button" class="pill-choice" data-fill-course="MA 26100">MA 26100</button>
-              <button type="button" class="pill-choice" data-fill-course="CHM 11510">CHM 11510</button>
-              <button type="button" class="pill-choice" data-fill-course="ENGR 13100">ENGR 13100</button>
-              <button type="button" class="pill-choice" data-fill-course="SLCA 10100">SLCA 10100</button>
+      <!-- 2. Meals & Windows -->
+      <details class="settings-accordion">
+        <summary class="settings-accordion-summary">
+          <div>
+            <h3>Meals &amp; Windows</h3>
+            <p>Preferred eating windows paired with live Purdue Dining hours</p>
+          </div>
+          <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </summary>
+        <form id="meals-settings-form" class="settings-accordion-body settings-form-stack" novalidate>
+          <div class="window-block">
+            <span class="window-block-title">Meal 1 Window</span>
+            <div class="field-row-2">
+              <div class="field-group">
+                <label for="set-meal1-start">Start</label>
+                <input id="set-meal1-start" type="time" value="10:30" required />
+              </div>
+              <div class="field-group">
+                <label for="set-meal1-end">End</label>
+                <input id="set-meal1-end" type="time" value="14:30" required />
+              </div>
             </div>
           </div>
 
-          <div class="field-group">
-            <label>Days of Week</label>
-            <div class="day-pills" id="pillar-day-pills" role="group" aria-label="Days of week">
-              <button type="button" class="day-pill" data-day="1" aria-pressed="false">M</button>
-              <button type="button" class="day-pill" data-day="2" aria-pressed="false">T</button>
-              <button type="button" class="day-pill" data-day="3" aria-pressed="false">W</button>
-              <button type="button" class="day-pill" data-day="4" aria-pressed="false">Th</button>
-              <button type="button" class="day-pill" data-day="5" aria-pressed="false">F</button>
+          <div class="window-block">
+            <span class="window-block-title">Meal 2 Window</span>
+            <div class="field-row-2">
+              <div class="field-group">
+                <label for="set-meal2-start">Start</label>
+                <input id="set-meal2-start" type="time" value="16:30" required />
+              </div>
+              <div class="field-group">
+                <label for="set-meal2-end">End</label>
+                <input id="set-meal2-end" type="time" value="20:30" required />
+              </div>
+            </div>
+          </div>
+
+          <div class="window-block">
+            <span class="window-block-title">Meal 3 Window (when 3 Meals selected)</span>
+            <div class="field-row-2">
+              <div class="field-group">
+                <label for="set-meal3-start">Start</label>
+                <input id="set-meal3-start" type="time" value="19:30" required />
+              </div>
+              <div class="field-group">
+                <label for="set-meal3-end">End</label>
+                <input id="set-meal3-end" type="time" value="22:00" required />
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full">Save Meal Windows</button>
+        </form>
+      </details>
+
+      <!-- 3. Sleep, Showers & Runs -->
+      <details class="settings-accordion">
+        <summary class="settings-accordion-summary">
+          <div>
+            <h3>Sleep, Showers &amp; Runs</h3>
+            <p>Protect 8h sleep (7h floor), night showers, wake-up, and 2x/wk runs</p>
+          </div>
+          <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </summary>
+        <form id="wellness-settings-form" class="settings-accordion-body settings-form-stack" novalidate>
+          <div class="field-row-2">
+            <div class="field-group">
+              <label for="set-pref-sleep">Preferred Sleep (hrs)</label>
+              <input id="set-pref-sleep" type="number" min="6" max="11" step="0.5" value="8.0" required />
+            </div>
+            <div class="field-group">
+              <label for="set-min-sleep">Minimum Floor (hrs)</label>
+              <input id="set-min-sleep" type="number" min="5" max="10" step="0.5" value="7.0" required />
             </div>
           </div>
 
           <div class="field-row-2">
             <div class="field-group">
-              <label for="pillar-start-input">Start Time</label>
-              <input id="pillar-start-input" type="time" value="09:30" required />
+              <label for="set-evening-shower">Evening Shower (min)</label>
+              <input id="set-evening-shower" type="number" min="10" max="90" step="5" value="40" required />
             </div>
             <div class="field-group">
-              <label for="pillar-end-input">End Time</label>
-              <input id="pillar-end-input" type="time" value="10:20" required />
+              <label for="set-noclass-wake">No-Class Wake Time</label>
+              <input id="set-noclass-wake" type="time" value="08:30" required />
             </div>
           </div>
 
           <div class="field-group">
-            <label>Walk Buffer</label>
-            <div class="pill-row" id="pillar-buffer-pills" role="group" aria-label="Walk buffer minutes">
-              <button type="button" class="pill-choice" data-buffer="10">10m</button>
-              <button type="button" class="pill-choice is-active" data-buffer="15">15m</button>
-              <button type="button" class="pill-choice" data-buffer="20">20m</button>
-              <button type="button" class="pill-choice" data-buffer="25">25m</button>
+            <label for="set-runs-per-week">1-Hour Runs Per Week (130m block)</label>
+            <input id="set-runs-per-week" type="number" min="0" max="7" step="1" value="2" required />
+          </div>
+
+          <div class="field-group">
+            <label>Preferred Run Days</label>
+            <div class="day-pills day-pills-7" id="settings-run-days" role="group" aria-label="Preferred run days">
+              <button type="button" class="day-pill" data-run-day="0" aria-pressed="false">Su</button>
+              <button type="button" class="day-pill" data-run-day="1" aria-pressed="false">M</button>
+              <button type="button" class="day-pill" data-run-day="2" aria-pressed="false">T</button>
+              <button type="button" class="day-pill" data-run-day="3" aria-pressed="true">W</button>
+              <button type="button" class="day-pill" data-run-day="4" aria-pressed="false">Th</button>
+              <button type="button" class="day-pill" data-run-day="5" aria-pressed="false">F</button>
+              <button type="button" class="day-pill" data-run-day="6" aria-pressed="true">Sa</button>
             </div>
           </div>
 
-          <div id="pillar-form-error" class="form-error" role="alert" hidden></div>
+          <div id="wellness-form-error" class="form-error" role="alert" hidden></div>
 
-          <button id="btn-pillar-submit" type="submit" class="btn btn-primary btn-full">
-            Add Class
-          </button>
+          <button type="submit" class="btn btn-primary btn-full">Save Sleep &amp; Run Settings</button>
         </form>
-      </section>
+      </details>
+
+      <!-- 4. Weekly Class Pillars -->
+      <details class="settings-accordion">
+        <summary class="settings-accordion-summary">
+          <div>
+            <h3>Weekly Class Pillars</h3>
+            <p>Recurring classes, walk-out buffers, and dynamic wake-up anchor</p>
+          </div>
+          <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </summary>
+        <div class="settings-accordion-body settings-form-stack">
+          <div id="pillars-list" class="pillars-list"></div>
+
+          <form id="pillar-form" class="pillar-form-card" novalidate>
+            <div class="pillar-form-header">
+              <h4 id="pillar-form-title">Add Class</h4>
+              <button id="btn-pillar-cancel" type="button" class="text-btn" hidden>Cancel edit</button>
+            </div>
+
+            <div class="field-group">
+              <label for="pillar-name-input">Class Name</label>
+              <input
+                id="pillar-name-input"
+                type="text"
+                placeholder="e.g., CHM 11510"
+                maxlength="80"
+                required
+              />
+              <div class="pill-row" id="pillar-course-pills" role="group" aria-label="Quick-fill class name">
+                <button type="button" class="pill-choice" data-fill-course="MA 26100">MA 26100</button>
+                <button type="button" class="pill-choice" data-fill-course="CHM 11510">CHM 11510</button>
+                <button type="button" class="pill-choice" data-fill-course="ENGR 13100">ENGR 13100</button>
+                <button type="button" class="pill-choice" data-fill-course="SLCA 10100">SLCA 10100</button>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <label>Days of Week</label>
+              <div class="day-pills" id="pillar-day-pills" role="group" aria-label="Days of week">
+                <button type="button" class="day-pill" data-day="1" aria-pressed="false">M</button>
+                <button type="button" class="day-pill" data-day="2" aria-pressed="false">T</button>
+                <button type="button" class="day-pill" data-day="3" aria-pressed="false">W</button>
+                <button type="button" class="day-pill" data-day="4" aria-pressed="false">Th</button>
+                <button type="button" class="day-pill" data-day="5" aria-pressed="false">F</button>
+              </div>
+            </div>
+
+            <div class="field-row-2">
+              <div class="field-group">
+                <label for="pillar-start-input">Start Time</label>
+                <input id="pillar-start-input" type="time" value="09:30" required />
+              </div>
+              <div class="field-group">
+                <label for="pillar-end-input">End Time</label>
+                <input id="pillar-end-input" type="time" value="10:20" required />
+              </div>
+            </div>
+
+            <div class="field-group">
+              <label>Walk Buffer</label>
+              <div class="pill-row" id="pillar-buffer-pills" role="group" aria-label="Walk buffer minutes">
+                <button type="button" class="pill-choice" data-buffer="10">10m</button>
+                <button type="button" class="pill-choice is-active" data-buffer="15">15m</button>
+                <button type="button" class="pill-choice" data-buffer="20">20m</button>
+                <button type="button" class="pill-choice" data-buffer="25">25m</button>
+              </div>
+            </div>
+
+            <div id="pillar-form-error" class="form-error" role="alert" hidden></div>
+
+            <button id="btn-pillar-submit" type="submit" class="btn btn-primary btn-full">
+              Add Class
+            </button>
+          </form>
+        </div>
+      </details>
 
       <!-- Account Section -->
       <section class="settings-section settings-account">
@@ -458,6 +718,37 @@
         <button id="btn-late-cancel" type="button" class="btn btn-secondary">Cancel</button>
         <button id="btn-late-proceed" type="button" class="btn btn-primary">Proceed</button>
       </div>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       7. PROTECT YOUR SLEEP — USE AI TONIGHT MODAL
+       ======================================================================= -->
+  <div id="sleep-alert-modal" class="modal-backdrop modal-backdrop-center" role="alertdialog" aria-modal="true" aria-labelledby="sleep-alert-title" aria-describedby="sleep-alert-message" hidden>
+    <div class="confirm-card sleep-alert-card">
+      <div class="confirm-icon sleep-alert-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </div>
+      <h3 id="sleep-alert-title">Protect Your Sleep — Use AI Tonight</h3>
+      <p id="sleep-alert-message" class="confirm-message"></p>
+      <div class="confirm-actions confirm-actions-stack">
+        <button id="btn-sleep-view-overflow" type="button" class="btn btn-primary btn-full">View Overflow Tasks</button>
+        <button id="btn-sleep-got-it" type="button" class="btn btn-secondary btn-full">Got It</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       8. MOVE RUN DAY PICKER MODAL
+       ======================================================================= -->
+  <div id="move-run-modal" class="modal-backdrop modal-backdrop-center" role="dialog" aria-modal="true" aria-labelledby="move-run-title" hidden>
+    <div class="confirm-card move-run-card">
+      <h3 id="move-run-title">Move Run to Another Day</h3>
+      <p class="confirm-message">Pick a lighter day this week for your 130m run block.</p>
+      <div id="move-run-days-list" class="move-run-days-list"></div>
+      <button id="btn-move-run-cancel" type="button" class="btn btn-secondary btn-full">Cancel</button>
     </div>
   </div>
 
