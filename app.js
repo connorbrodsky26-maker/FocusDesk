@@ -853,55 +853,6 @@ async function applyHistoryStep(action, direction) {
       const firstErr = results.find((r) => r.error)?.error || null;
       return { error: firstErr };
     });
-  } else if (action.type === "create") {
-    if (isUndo) {
-      state.tasks = state.tasks.filter((t) => t.id !== action.task.id);
-      saveTasksToCache();
-      renderAllVisibleViews();
-      await runSupabaseWrite(() => supabase.from("tasks").delete().eq("id", action.task.id));
-    } else {
-      state.tasks.push({ ...action.task });
-      saveTasksToCache();
-      renderAllVisibleViews({ animateEnter: true });
-      await runSupabaseWrite(() => supabase.from("tasks").upsert(action.task));
-    }
-  } else if (action.type === "edit") {
-    const snapshot = isUndo ? action.before : action.after;
-    const idx = state.tasks.findIndex((t) => t.id === snapshot.id);
-    if (idx !== -1) {
-      state.tasks[idx] = { ...snapshot };
-    } else {
-      state.tasks.push({ ...snapshot });
-    }
-    saveTasksToCache();
-    renderAllVisibleViews();
-    await runSupabaseWrite(() =>
-      supabase
-        .from("tasks")
-        .update({
-          title: snapshot.title,
-          course: snapshot.course,
-          due_at: snapshot.due_at,
-          duration_minutes: snapshot.duration_minutes,
-          all_at_once: snapshot.all_at_once,
-          is_starred: snapshot.is_starred,
-          status: snapshot.status,
-          sort_order: snapshot.sort_order
-        })
-        .eq("id", snapshot.id)
-    );
-  } else if (action.type === "delete") {
-    if (isUndo) {
-      state.tasks.push({ ...action.task });
-      saveTasksToCache();
-      renderAllVisibleViews({ animateEnter: true });
-      await runSupabaseWrite(() => supabase.from("tasks").upsert(action.task));
-    } else {
-      state.tasks = state.tasks.filter((t) => t.id !== action.task.id);
-      saveTasksToCache();
-      renderAllVisibleViews();
-      await runSupabaseWrite(() => supabase.from("tasks").delete().eq("id", action.task.id));
-    }
   }
 }
 
@@ -1034,7 +985,6 @@ async function createTask(payload) {
 
   state.tasks.push(newTask);
   saveTasksToCache();
-  pushUndoAction({ type: "create", task: { ...newTask } });
   renderAllVisibleViews({ animateEnter: true });
 
   await runSupabaseWrite(() => supabase.from("tasks").insert(newTask));
@@ -1057,7 +1007,6 @@ async function updateTask(taskId, payload) {
 
   state.tasks[idx] = after;
   saveTasksToCache();
-  pushUndoAction({ type: "edit", before, after: { ...after } });
   renderAllVisibleViews();
 
   await runSupabaseWrite(() =>
@@ -1080,8 +1029,14 @@ async function deleteTask(taskId) {
   if (!existing) return;
 
   state.tasks = state.tasks.filter((t) => t.id !== taskId);
+  // Remove any Done / Later Today history entries referencing the deleted task
+  const keepEntry = (entry) =>
+    entry.type === "complete"
+      ? entry.taskId !== taskId
+      : !(entry.changes || []).some((c) => c.id === taskId);
+  state.undoStack = state.undoStack.filter(keepEntry);
+  state.redoStack = state.redoStack.filter(keepEntry);
   saveTasksToCache();
-  pushUndoAction({ type: "delete", task: { ...existing } });
   renderAllVisibleViews({ animateEnter: true });
 
   await runSupabaseWrite(() => supabase.from("tasks").delete().eq("id", taskId));
@@ -2001,10 +1956,42 @@ function bindEvents() {
     if (plan) executeLaterTodayPlan(plan);
   });
 
+  // Prevent pinch-to-zoom and Ctrl/Cmd browser zoom
+  const preventEvent = (e) => e.preventDefault();
+  document.addEventListener("gesturestart", preventEvent, { passive: false });
+  document.addEventListener("gesturechange", preventEvent, { passive: false });
+  document.addEventListener("gestureend", preventEvent, { passive: false });
+
+  document.addEventListener(
+    "touchmove",
+    (e) => {
+      if (e.touches && e.touches.length > 1) {
+        e.preventDefault();
+      }
+    },
+    { passive: false }
+  );
+
+  window.addEventListener(
+    "wheel",
+    (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    },
+    { passive: false }
+  );
+
   // Global Keyboard Shortcuts (Edge / Desktop)
   window.addEventListener("keydown", (e) => {
     const tag = document.activeElement?.tagName;
     const isTyping = tag === "INPUT" || tag === "TEXTAREA";
+
+    // Block keyboard zoom shortcuts (Ctrl/Cmd + '+', '-', '=', '0')
+    if ((e.ctrlKey || e.metaKey) && ["+", "=", "-", "_", "0"].includes(e.key)) {
+      e.preventDefault();
+      return;
+    }
 
     if (e.key === "Escape") {
       if (!dom.lateModal.hidden) {

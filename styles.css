@@ -54,7 +54,14 @@
 html, body {
   margin: 0;
   padding: 0;
+  width: 100%;
   height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  position: fixed;
+  inset: 0;
   background: var(--bg-canvas);
   color: var(--text-primary);
   font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -62,10 +69,10 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  overflow-x: hidden;
   line-height: 1.45;
 }
 
@@ -219,7 +226,7 @@ html[data-boot="app"] #auth-view {
   border: 1px solid var(--border-subtle);
   background: var(--bg-canvas);
   color: var(--text-primary);
-  font-size: 0.96rem;
+  font-size: 16px;
   font-weight: 500;
   transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
@@ -311,7 +318,9 @@ html[data-boot="app"] #auth-view {
    ============================================================================ */
 
 .app-view {
-  min-height: 100dvh;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   max-width: 680px;
@@ -471,10 +480,11 @@ html[data-boot="app"] #auth-view {
 .focus-card {
   position: relative;
   width: 100%;
+  min-height: clamp(350px, 49dvh, 460px);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  padding: 26px 24px 24px;
+  padding: 28px 26px 26px;
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
@@ -706,7 +716,10 @@ html[data-boot="app"] #auth-view {
 
 .card-title {
   margin: 4px 0 8px;
-  font-size: clamp(1.38rem, 4.8vw, 1.75rem);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  font-size: clamp(1.45rem, 5vw, 1.85rem);
   font-weight: 700;
   line-height: 1.28;
   letter-spacing: -0.025em;
@@ -718,7 +731,7 @@ html[data-boot="app"] #auth-view {
   display: grid;
   grid-template-columns: 1.25fr 1fr;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: auto;
 }
 
 .card-actions .btn {
@@ -731,7 +744,8 @@ html[data-boot="app"] #auth-view {
 .state-card {
   text-align: center;
   align-items: center;
-  padding: 38px 28px 34px;
+  justify-content: center;
+  padding: 42px 28px 38px;
   gap: 12px;
 }
 
@@ -783,7 +797,7 @@ html[data-boot="app"] #auth-view {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 20px 26px;
+  padding: 8px 20px 30px;
 }
 
 .history-bar {
@@ -828,8 +842,8 @@ html[data-boot="app"] #auth-view {
   position: fixed;
   right: max(22px, calc(50vw - 318px));
   bottom: calc(22px + var(--safe-bottom));
-  width: 58px;
-  height: 58px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background: var(--accent);
   color: #FFFFFF;
@@ -947,6 +961,8 @@ html[data-boot="app"] #auth-view {
   align-items: stretch;
   gap: 12px;
   overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -961,13 +977,13 @@ html[data-boot="app"] #auth-view {
 .carousel-card {
   position: relative;
   flex: 0 0 var(--carousel-card-w);
-  min-height: 295px;
+  min-height: clamp(360px, 50dvh, 450px);
   scroll-snap-align: center;
   scroll-snap-stop: always;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  padding: 22px 20px 20px;
+  padding: 24px 22px 22px;
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
@@ -1051,6 +1067,8 @@ html[data-boot="app"] #auth-view {
 .settings-content {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   width: 100%;
   max-width: 600px;
   margin: 0 auto;
@@ -1228,6 +1246,8 @@ html[data-boot="app"] #auth-view {
   max-width: 470px;
   max-height: 92dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 26px 26px 0 0;
