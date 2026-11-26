@@ -1,9 +1,9 @@
-const CACHE_NAME = "focusdeck-shell-v3";
+const CACHE_NAME = "focusdeck-shell-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./app.js",
+  "./styles.css?v=2",
+  "./app.js?v=2",
   "./manifest.json",
   "./icon.svg",
   "./icon-192.png",
@@ -18,9 +18,9 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
@@ -30,39 +30,41 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // Never cache live Supabase API or Auth calls
+  // Never cache live Supabase API, Auth, or Edge Function calls
   if (url.hostname.endsWith("supabase.co")) {
     return;
   }
 
-  // Navigation requests: stale-while-revalidate with fallback to cached ./index.html
-  if (request.mode === "navigate") {
+  // Same-origin HTML, CSS, JS, Manifest: Network-First so deploys show immediately, with offline cache fallback
+  if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match("./index.html").then((cached) => {
-        const networkFetch = fetch(request)
-          .then((res) => {
-            if (res && res.ok) {
-              const copy = res.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
-            }
-            return res;
+      fetch(request, { cache: "no-cache" })
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then((cached) => {
+            if (cached) return cached;
+            if (request.mode === "navigate") return caches.match("./index.html");
+            return undefined;
           })
-          .catch(() => cached);
-        return cached || networkFetch;
-      })
+        )
     );
     return;
   }
 
-  // Same-origin shell files & Google Fonts / ESM CDN: stale-while-revalidate
-  const isCacheableOrigin =
-    url.origin === self.location.origin ||
+  // Fonts & ESM CDN: Stale-While-Revalidate for fast offline boot
+  const isExternalAsset =
     url.hostname === "fonts.googleapis.com" ||
     url.hostname === "fonts.gstatic.com" ||
     url.hostname === "cdn.jsdelivr.net" ||
     url.hostname === "esm.sh";
 
-  if (!isCacheableOrigin) return;
+  if (!isExternalAsset) return;
 
   event.respondWith(
     caches.match(request).then((cached) => {

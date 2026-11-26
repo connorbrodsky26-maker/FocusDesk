@@ -3566,10 +3566,27 @@ function bindEvents() {
 // ============================================================================
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
+    let reloadedForSw = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloadedForSw) return;
+      reloadedForSw = true;
+      window.location.reload();
+    });
+
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch((err) => {
-        console.warn("Service worker registration skipped:", err);
-      });
+      navigator.serviceWorker
+        .register("./sw.js", { updateViaCache: "none" })
+        .then((reg) => {
+          reg.update().catch(() => {});
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+              reg.update().catch(() => {});
+            }
+          });
+        })
+        .catch((err) => {
+          console.warn("Service worker registration skipped:", err);
+        });
     });
   }
 }
