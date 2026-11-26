@@ -1207,6 +1207,7 @@ html[data-boot="app"] #auth-view {
 }
 
 .plan-card {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1667,19 +1668,22 @@ html[data-boot="app"] #auth-view {
 
 .settings-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-y;
   width: 100%;
   max-width: 600px;
   margin: 0 auto;
-  padding: 6px 20px 48px;
+  padding: 6px 20px calc(68px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
 .settings-card {
+  flex-shrink: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -1795,6 +1799,7 @@ html[data-boot="app"] #auth-view {
 }
 
 .settings-section {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;

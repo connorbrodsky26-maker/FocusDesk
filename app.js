@@ -3120,6 +3120,11 @@ function bindEvents() {
     const willOpen = panel.hidden;
     panel.hidden = !willOpen;
     trigger.setAttribute("aria-expanded", String(willOpen));
+    if (willOpen) {
+      requestAnimationFrame(() => {
+        trigger.closest(".settings-card")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    }
   });
 
   // Day Plan Navigation & Re-flow from Now
