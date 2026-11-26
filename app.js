@@ -936,7 +936,7 @@ function setGcalStatus(text, tone = "") {
   dom.gcalSyncStatus.className = `gcal-status-line${tone ? " " + tone : ""}`;
 }
 
-async function triggerGoogleCalendarSync({ showFeedback = false } = {}) {
+async function triggerGoogleCalendarSync({ showFeedback = false, horizonStart = null } = {}) {
   if (!state.user || !navigator.onLine) {
     if (showFeedback) showToast("Offline — cannot sync Google Calendar");
     return;
@@ -948,6 +948,7 @@ async function triggerGoogleCalendarSync({ showFeedback = false } = {}) {
     if (!accessToken) return;
 
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Indiana/Indianapolis";
+    const startOfTodayIso = horizonStart || addLocalDays(new Date(), 0).toISOString();
     setGcalStatus("Syncing to Google Calendar...");
 
     const res = await fetch(`${EDGE_FUNCTION_URL}?action=gcal_sync`, {
@@ -957,7 +958,7 @@ async function triggerGoogleCalendarSync({ showFeedback = false } = {}) {
         Authorization: `Bearer ${accessToken}`,
         apikey: SUPABASE_PUBLISHABLE_KEY
       },
-      body: JSON.stringify({ timeZone })
+      body: JSON.stringify({ timeZone, horizonStart: startOfTodayIso })
     });
 
     const payload = await res.json().catch(() => ({}));
@@ -972,7 +973,7 @@ async function triggerGoogleCalendarSync({ showFeedback = false } = {}) {
     }
 
     const nowStr = formatTime12hFromDate(new Date());
-    setGcalStatus(`Synced to Google Calendar at ${nowStr}`, "is-ok");
+    setGcalStatus(`Synced at ${nowStr} (${payload.created ?? 0} new, ${payload.deleted ?? 0} removed)`, "is-ok");
     if (showFeedback) {
       showToast("Google Calendar updated!");
     }
@@ -1006,11 +1007,11 @@ async function syncPlannedEventsToSupabase({ forceGcal = false } = {}) {
   await runSupabaseWrite(async () => {
     if (myVersion !== state.plannedSyncVersion) return { error: null };
 
+    // Replace ALL of this user's planned_events rows so no stale past/old rows ever linger
     const delRes = await supabase
       .from("planned_events")
       .delete()
-      .eq("user_id", state.user.id)
-      .gte("start_at", horizonStartIso);
+      .eq("user_id", state.user.id);
 
     if (delRes.error) return { error: delRes.error };
     if (myVersion !== state.plannedSyncVersion) return { error: null };
@@ -1027,7 +1028,7 @@ async function syncPlannedEventsToSupabase({ forceGcal = false } = {}) {
 
   // Immediately push changes to Google Calendar (instant iPhone Calendar sync!)
   if (writeSucceeded && myVersion === state.plannedSyncVersion) {
-    await triggerGoogleCalendarSync({ showFeedback: forceGcal });
+    await triggerGoogleCalendarSync({ showFeedback: forceGcal, horizonStart: horizonStartIso });
   }
 }
 
