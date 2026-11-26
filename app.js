@@ -113,7 +113,9 @@ const dom = {
   focusCardSlot: document.getElementById("focus-card-slot"),
   btnUndo: document.getElementById("btn-undo"),
   btnRedo: document.getElementById("btn-redo"),
+  btnFabGcalSync: document.getElementById("btn-fab-gcal-sync"),
   btnAddFab: document.getElementById("btn-add-fab"),
+  btnPlanGcalSync: document.getElementById("btn-plan-gcal-sync"),
   btnPlanAddFab: document.getElementById("btn-plan-add-fab"),
 
   // Today's Meals Bottom Sheet
@@ -896,14 +898,16 @@ function buildPlannedEventsRows(plan, userId) {
       end_at: wakeIso
     });
 
-    // 2. Scheduled non-class blocks: personal, meal, run, study, shower
+    // 2. Scheduled non-class blocks: personal (including Personal study tasks for green color), meal, run, study, shower
     for (const block of dayPlan.blocks) {
       if (!allowedTypes.has(block.eventType)) continue;
+      const exportedType = block.eventType === "study" && block.isPersonal ? "personal" : block.eventType;
+      const isTaskBlock = block.eventType === "study" || block.eventType === "personal";
       rows.push({
         user_id: userId,
-        event_type: block.eventType,
+        event_type: exportedType,
         title: block.icsTitle || block.title,
-        location: block.location || "",
+        location: isTaskBlock ? "" : (block.location || ""),
         notes: block.notes || "",
         start_at: dateFromDayAndMinute(dayPlan.date, block.startMin).toISOString(),
         end_at: dateFromDayAndMinute(dayPlan.date, block.endMin).toISOString()
@@ -1801,8 +1805,8 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
               isStarred: Boolean(candidate.task.is_starred),
               afterDueTime,
               title: isSplit ? `${candidate.task.title} (Part ${candidate.partCount})` : candidate.task.title,
-              icsTitle: `${candidate.task.course}: ${candidate.task.title}`,
-              location: candidate.task.course,
+              icsTitle: candidate.task.title,
+              location: "",
               notes: `Due ${formatDueLabel(candidate.task.due_at, now)} · ${formatDuration(chunk)} block`,
               startMin: blockStart,
               endMin: blockEnd,
@@ -3327,6 +3331,25 @@ function bindEvents() {
   dom.btnPlanAddFab.addEventListener("click", () => openTaskModal(null));
   dom.btnUndo.addEventListener("click", handleUndo);
   dom.btnRedo.addEventListener("click", handleRedo);
+
+  // Green Checkmark Circle Buttons -> Push Updates Immediately to Google Calendar
+  const handleManualGcalPush = async (btn) => {
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add("is-syncing");
+    }
+    try {
+      state.latestSevenDayPlan = computeSevenDayPlan(new Date());
+      await syncPlannedEventsToSupabase({ forceGcal: true });
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove("is-syncing");
+      }
+    }
+  };
+  dom.btnFabGcalSync.addEventListener("click", () => handleManualGcalPush(dom.btnFabGcalSync));
+  dom.btnPlanGcalSync.addEventListener("click", () => handleManualGcalPush(dom.btnPlanGcalSync));
 
   // Bottom 2-Tab Navigation
   dom.tabBtnFocus.addEventListener("click", () => setActiveTab("focus"));

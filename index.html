@@ -36,7 +36,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="./styles.css?v=8" />
+  <link rel="stylesheet" href="./styles.css?v=9" />
 </head>
 <body>
   <!-- =======================================================================
@@ -176,18 +176,32 @@
           </button>
         </div>
 
-        <button
-          id="btn-add-fab"
-          type="button"
-          class="fab-add-inline"
-          aria-label="Add new task"
-          title="Add Task"
-        >
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
+        <div class="fab-cluster">
+          <button
+            id="btn-fab-gcal-sync"
+            type="button"
+            class="fab-sync-inline"
+            aria-label="Sync plan to Google Calendar"
+            title="Push updates to Google Calendar"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </button>
+
+          <button
+            id="btn-add-fab"
+            type="button"
+            class="fab-add-inline"
+            aria-label="Add new task"
+            title="Add Task"
+          >
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -230,19 +244,33 @@
         <div id="plan-timeline-list" class="plan-timeline-list"></div>
       </div>
 
-      <!-- Floating '+' Button on Day Plan Tab -->
-      <button
-        id="btn-plan-add-fab"
-        type="button"
-        class="fab-add-floating"
-        aria-label="Add new task"
-        title="Add Task"
-      >
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" aria-hidden="true">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-      </button>
+      <!-- Floating Sync + Add Buttons on Day Plan Tab -->
+      <div class="plan-fab-cluster">
+        <button
+          id="btn-plan-gcal-sync"
+          type="button"
+          class="fab-sync-floating"
+          aria-label="Sync plan to Google Calendar"
+          title="Push updates to Google Calendar"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </button>
+
+        <button
+          id="btn-plan-add-fab"
+          type="button"
+          class="fab-add-floating"
+          aria-label="Add new task"
+          title="Add Task"
+        >
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Clean 2-Tab Bottom Navigation Bar (Word-only, larger & colorful) -->
@@ -823,6 +851,6 @@
   <!-- Subtle Toast Notification -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script type="module" src="./app.js?v=8"></script>
+  <script type="module" src="./app.js?v=9"></script>
 </body>
 </html>
