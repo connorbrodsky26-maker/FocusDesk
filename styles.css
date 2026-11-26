@@ -1797,6 +1797,44 @@ html[data-boot="app"] #auth-view {
   gap: 14px;
 }
 
+.gcal-sync-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gcal-sync-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gcal-sync-header strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.gcal-status-line {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.gcal-status-line.is-ok {
+  color: var(--sage-accent);
+}
+
+.gcal-status-line.is-warn {
+  color: var(--danger);
+}
+
+.ics-fallback-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 2px 0;
+}
+
 .ics-box {
   display: flex;
   flex-direction: column;

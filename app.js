@@ -148,6 +148,8 @@ const dom = {
   // Settings Overlay
   settingsView: document.getElementById("settings-view"),
   btnSettingsClose: document.getElementById("btn-settings-close"),
+  btnGcalSyncNow: document.getElementById("btn-gcal-sync-now"),
+  gcalSyncStatus: document.getElementById("gcal-sync-status"),
   settingsIcsUrl: document.getElementById("settings-ics-url"),
   btnCopyIcs: document.getElementById("btn-copy-ics"),
   mealsSettingsForm: document.getElementById("meals-settings-form"),
@@ -928,7 +930,62 @@ function computePlannedEventsSignature(rows) {
   return JSON.stringify(rows.map((r) => [r.event_type, r.title, r.start_at, r.end_at]));
 }
 
-async function syncPlannedEventsToSupabase() {
+function setGcalStatus(text, tone = "") {
+  if (!dom.gcalSyncStatus) return;
+  dom.gcalSyncStatus.textContent = text;
+  dom.gcalSyncStatus.className = `gcal-status-line${tone ? " " + tone : ""}`;
+}
+
+async function triggerGoogleCalendarSync({ showFeedback = false } = {}) {
+  if (!state.user || !navigator.onLine) {
+    if (showFeedback) showToast("Offline — cannot sync Google Calendar");
+    return;
+  }
+
+  try {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data?.session?.access_token;
+    if (!accessToken) return;
+
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Indiana/Indianapolis";
+    setGcalStatus("Syncing to Google Calendar...");
+
+    const res = await fetch(`${EDGE_FUNCTION_URL}?action=gcal_sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_PUBLISHABLE_KEY
+      },
+      body: JSON.stringify({ timeZone })
+    });
+
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || payload.error) {
+      throw new Error(payload.error || `HTTP ${res.status}`);
+    }
+
+    if (payload.configured === false) {
+      setGcalStatus("Add Google secrets in Supabase to enable instant sync", "is-warn");
+      if (showFeedback) showToast("Google Calendar secrets not set yet");
+      return;
+    }
+
+    const nowStr = formatTime12hFromDate(new Date());
+    setGcalStatus(`Synced to Google Calendar at ${nowStr}`, "is-ok");
+    if (showFeedback) {
+      showToast("Google Calendar updated!");
+    }
+  } catch (err) {
+    console.warn("Google Calendar push sync skipped/failed:", err);
+    setGcalStatus("Google Calendar sync needs setup or retry", "is-warn");
+    if (showFeedback) {
+      showToast(`Google sync error: ${err?.message || "Check Edge Function"}`);
+    }
+  }
+}
+
+async function syncPlannedEventsToSupabase({ forceGcal = false } = {}) {
   if (!state.user || !navigator.onLine || !state.latestSevenDayPlan) return;
 
   const now = new Date();
@@ -939,11 +996,12 @@ async function syncPlannedEventsToSupabase() {
   const nextSig = computePlannedEventsSignature(rows);
 
   // Avoid redundant planned_events delete/insert writes on app resume when nothing changed
-  if (nextSig === state.lastPlannedEventsSig) {
+  if (!forceGcal && nextSig === state.lastPlannedEventsSig) {
     return;
   }
 
   const myVersion = ++state.plannedSyncVersion;
+  let writeSucceeded = false;
 
   await runSupabaseWrite(async () => {
     if (myVersion !== state.plannedSyncVersion) return { error: null };
@@ -963,8 +1021,14 @@ async function syncPlannedEventsToSupabase() {
     }
 
     state.lastPlannedEventsSig = nextSig;
+    writeSucceeded = true;
     return { error: null };
   });
+
+  // Immediately push changes to Google Calendar (instant iPhone Calendar sync!)
+  if (writeSucceeded && myVersion === state.plannedSyncVersion) {
+    await triggerGoogleCalendarSync({ showFeedback: forceGcal });
+  }
 }
 
 async function syncFromSupabase(showFeedback = false) {
@@ -3371,6 +3435,19 @@ function bindEvents() {
   dom.btnSettingsClose.addEventListener("click", closeSettingsView);
   dom.btnPillarCancel.addEventListener("click", resetPillarForm);
   dom.btnSyncNow.addEventListener("click", () => syncFromSupabase(true));
+
+  // Settings: Instant Google Calendar Sync button
+  dom.btnGcalSyncNow.addEventListener("click", async () => {
+    dom.btnGcalSyncNow.disabled = true;
+    dom.btnGcalSyncNow.textContent = "Syncing...";
+    try {
+      state.latestSevenDayPlan = computeSevenDayPlan(new Date());
+      await syncPlannedEventsToSupabase({ forceGcal: true });
+    } finally {
+      dom.btnGcalSyncNow.disabled = false;
+      dom.btnGcalSyncNow.textContent = "Sync to Google Calendar Now";
+    }
+  });
 
   // Settings: Copy iPhone Calendar .ics Link
   dom.btnCopyIcs.addEventListener("click", async () => {

@@ -1,9 +1,9 @@
-const CACHE_NAME = "focusdeck-shell-v8";
+const CACHE_NAME = "focusdeck-shell-v9";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=6",
-  "./app.js?v=6",
+  "./styles.css?v=7",
+  "./app.js?v=7",
   "./manifest.json",
   "./icon.svg",
   "./icon-192.png",

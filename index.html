@@ -36,7 +36,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="./styles.css?v=6" />
+  <link rel="stylesheet" href="./styles.css?v=7" />
 </head>
 <body>
   <!-- =======================================================================
@@ -572,29 +572,42 @@
         </div>
       </section>
 
-      <!-- 4. iPhone Calendar Subscription (At Bottom — One-Time Setup) -->
+      <!-- 4. Instant Calendar Sync (Google Calendar + Optional .ics) — At Bottom -->
       <section class="settings-card">
         <button type="button" class="settings-accordion-btn" data-accordion-target="acc-calendar" aria-expanded="false">
           <div class="settings-accordion-copy">
-            <h3>iPhone Calendar Subscription</h3>
-            <p>One-time .ics link for Apple Calendar</p>
+            <h3>Calendar Sync (Google &amp; iPhone)</h3>
+            <p>Instant push to Google Calendar &amp; iPhone Calendar</p>
           </div>
           <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </button>
-        <div data-accordion-panel="acc-calendar" class="settings-accordion-body" hidden>
+        <div data-accordion-panel="acc-calendar" class="settings-accordion-body settings-form-stack" hidden>
+          <div class="gcal-sync-box">
+            <div class="gcal-sync-header">
+              <strong>Instant Google Calendar Sync</strong>
+              <span id="gcal-sync-status" class="gcal-status-line">Auto-syncs when your plan changes</span>
+            </div>
+            <button id="btn-gcal-sync-now" type="button" class="btn btn-primary btn-full">
+              Sync to Google Calendar Now
+            </button>
+            <p class="settings-help-note is-muted">
+              Pushes your 7-day FocusDeck Plan directly to Google Calendar so updates appear on iPhone Calendar &amp; Week Calendar within seconds. Classes stay excluded.
+            </p>
+          </div>
+
+          <div class="ics-fallback-divider"></div>
+
           <div class="ics-box">
+            <span class="window-block-title">Backup .ics Link (Optional)</span>
             <input id="settings-ics-url" type="text" readonly aria-label="Personal iPhone Calendar subscription URL" />
-            <button id="btn-copy-ics" type="button" class="btn btn-primary btn-full">
-              Copy Calendar Link
+            <button id="btn-copy-ics" type="button" class="btn btn-secondary btn-full">
+              Copy .ics Link
             </button>
           </div>
-          <p class="settings-help-note">
-            <strong>How to subscribe:</strong> Open Apple Calendar → Calendars → Add Calendar → Add Subscription Calendar, then paste this link. (If you use Week Calendar, toggle FocusDeck Plan on in Week Calendar's Calendars menu.)
-          </p>
           <p class="settings-help-note is-muted">
-            Classes are intentionally excluded from this feed so they never duplicate your existing Apple Calendar schedule.
+            <strong>Backup setup:</strong> Open Apple Calendar → Calendars → Add Calendar → Add Subscription Calendar, then paste this link. (If you use Week Calendar, toggle FocusDeck Plan on in Week Calendar's Calendars menu.)
           </p>
         </div>
       </section>
@@ -810,6 +823,6 @@
   <!-- Subtle Toast Notification -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script type="module" src="./app.js?v=6"></script>
+  <script type="module" src="./app.js?v=7"></script>
 </body>
 </html>
