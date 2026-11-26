@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#5D71BF" />
+  <meta name="description" content="FocusDeck — Calm, mobile-first ADHD task and focus assistant." />
+
+  <!-- iOS PWA / Standalone Meta -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="FocusDeck" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
+  <!-- PWA Manifest & Favicon -->
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+
+  <!-- Typography: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <title>FocusDeck</title>
+
+  <!-- Instant local-first boot hint to eliminate login flash (<0.2s perceived open) -->
+  <script>
+    (function () {
+      try {
+        var hasCachedUser = localStorage.getItem("focusdeck_user_email");
+        document.documentElement.dataset.boot = hasCachedUser ? "app" : "auth";
+      } catch (_) {
+        document.documentElement.dataset.boot = "auth";
+      }
+    })();
+  </script>
+
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- =======================================================================
+       1. ONE-TIME LOGIN SCREEN
+       ======================================================================= -->
+  <section id="auth-view" class="auth-view" aria-label="Sign in">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <rect x="4" y="4" width="16" height="16" rx="5" fill="#5D71BF" opacity="0.14"/>
+            <path d="M8.5 12.4L10.9 14.8L15.8 9.6" stroke="#5D71BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h1>FocusDeck</h1>
+        <p class="auth-subtitle">Sign in once to keep your tasks and class schedule synced across devices.</p>
+      </div>
+
+      <form id="auth-form" class="auth-form" novalidate>
+        <div class="field-group">
+          <label for="auth-email">Email</label>
+          <input
+            id="auth-email"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            placeholder="you@example.com"
+            required
+          />
+        </div>
+
+        <div class="field-group">
+          <label for="auth-password">Password</label>
+          <input
+            id="auth-password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Enter your password"
+            required
+          />
+        </div>
+
+        <div id="auth-error" class="form-error" role="alert" hidden></div>
+
+        <button id="auth-submit-btn" type="submit" class="btn btn-primary btn-full">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- =======================================================================
+       2. MAIN FOCUS APPLICATION SHELL
+       ======================================================================= -->
+  <div id="app-view" class="app-view">
+    <!-- Top Header Bar -->
+    <header class="top-header">
+      <div class="header-left">
+        <span class="app-wordmark">FocusDeck</span>
+        <button
+          id="sync-dot-btn"
+          type="button"
+          class="sync-dot-btn"
+          title="Synced"
+          aria-label="Sync status: Synced"
+        >
+          <span id="sync-dot" class="sync-dot is-synced"></span>
+        </button>
+      </div>
+
+      <div class="header-right">
+        <button id="btn-all-tasks" type="button" class="header-pill-btn">
+          All Tasks (<span id="all-tasks-count">0</span>)
+        </button>
+        <button
+          id="btn-settings"
+          type="button"
+          class="icon-btn"
+          aria-label="Open Settings"
+          title="Settings"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Single Focus Card Stage -->
+    <main class="focus-stage" aria-live="polite">
+      <!-- Quiet Context Pill -->
+      <div id="context-pill" class="context-pill">
+        <span class="context-dot" aria-hidden="true"></span>
+        <span id="context-pill-text">Open Study Block</span>
+      </div>
+
+      <!-- Dynamic Focus Card Container -->
+      <div id="focus-card-slot" class="focus-card-slot"></div>
+    </main>
+
+    <!-- Permanent Compact Undo / Redo Bar -->
+    <footer class="bottom-controls">
+      <div class="history-bar" role="group" aria-label="Undo and Redo">
+        <button id="btn-undo" type="button" class="history-btn" disabled title="Undo (Ctrl+Z)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 14L4 9l5-5"></path>
+            <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
+          </svg>
+          <span>Undo</span>
+        </button>
+        <span class="history-divider" aria-hidden="true"></span>
+        <button id="btn-redo" type="button" class="history-btn" disabled title="Redo (Ctrl+Y)">
+          <span>Redo</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 14l5-5-5-5"></path>
+            <path d="M4 20v-7a4 4 0 0 1 4-4h12"></path>
+          </svg>
+        </button>
+      </div>
+    </footer>
+
+    <!-- Floating Add Button -->
+    <button
+      id="btn-add-fab"
+      type="button"
+      class="fab-add"
+      aria-label="Add new task"
+      title="Add Task"
+    >
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
+  </div>
+
+  <!-- =======================================================================
+       3. ALL TASKS — SMOOTH HORIZONTAL PEEK CAROUSEL OVERLAY
+       ======================================================================= -->
+  <section id="carousel-view" class="overlay-view" aria-label="All Tasks" hidden>
+    <header class="overlay-header">
+      <div class="overlay-header-left">
+        <h2>All Tasks</h2>
+        <span id="carousel-counter" class="muted-counter">0 of 0</span>
+      </div>
+      <div class="overlay-header-right">
+        <button id="btn-carousel-add" type="button" class="header-pill-btn header-pill-accent">
+          + New
+        </button>
+        <button id="btn-carousel-close" type="button" class="icon-btn" aria-label="Close All Tasks">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="carousel-body">
+      <div id="carousel-stage" class="carousel-stage">
+        <div id="carousel-track" class="carousel-track" role="list" aria-label="Active tasks in queue order"></div>
+      </div>
+      <p id="carousel-hint" class="carousel-hint">Tap the centered card to edit</p>
+      <div id="carousel-empty" class="carousel-empty" hidden>
+        <p class="empty-title">No active tasks</p>
+        <p class="empty-sub">Your queue is completely clear.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =======================================================================
+       4. SETTINGS VIEW (WEEKLY CLASS PILLARS & ACCOUNT)
+       ======================================================================= -->
+  <section id="settings-view" class="overlay-view" aria-label="Settings" hidden>
+    <header class="overlay-header">
+      <div class="overlay-header-left">
+        <h2>Settings</h2>
+      </div>
+      <div class="overlay-header-right">
+        <button id="btn-settings-close" type="button" class="icon-btn" aria-label="Close Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="settings-content">
+      <!-- Weekly Class Pillars Section -->
+      <section class="settings-section">
+        <div class="section-heading">
+          <h3>Weekly Class Pillars</h3>
+          <p>Used to spot between-class gaps and calculate walk-out times.</p>
+        </div>
+
+        <div id="pillars-list" class="pillars-list"></div>
+
+        <form id="pillar-form" class="pillar-form-card" novalidate>
+          <div class="pillar-form-header">
+            <h4 id="pillar-form-title">Add Class</h4>
+            <button id="btn-pillar-cancel" type="button" class="text-btn" hidden>Cancel edit</button>
+          </div>
+
+          <div class="field-group">
+            <label for="pillar-name-input">Class Name</label>
+            <input
+              id="pillar-name-input"
+              type="text"
+              placeholder="e.g., CHM 11510"
+              maxlength="80"
+              required
+            />
+            <div class="pill-row" id="pillar-course-pills" role="group" aria-label="Quick-fill class name">
+              <button type="button" class="pill-choice" data-fill-course="MA 26100">MA 26100</button>
+              <button type="button" class="pill-choice" data-fill-course="CHM 11510">CHM 11510</button>
+              <button type="button" class="pill-choice" data-fill-course="ENGR 13100">ENGR 13100</button>
+              <button type="button" class="pill-choice" data-fill-course="SLCA 10100">SLCA 10100</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Days of Week</label>
+            <div class="day-pills" id="pillar-day-pills" role="group" aria-label="Days of week">
+              <button type="button" class="day-pill" data-day="1" aria-pressed="false">M</button>
+              <button type="button" class="day-pill" data-day="2" aria-pressed="false">T</button>
+              <button type="button" class="day-pill" data-day="3" aria-pressed="false">W</button>
+              <button type="button" class="day-pill" data-day="4" aria-pressed="false">Th</button>
+              <button type="button" class="day-pill" data-day="5" aria-pressed="false">F</button>
+            </div>
+          </div>
+
+          <div class="field-row-2">
+            <div class="field-group">
+              <label for="pillar-start-input">Start Time</label>
+              <input id="pillar-start-input" type="time" value="09:30" required />
+            </div>
+            <div class="field-group">
+              <label for="pillar-end-input">End Time</label>
+              <input id="pillar-end-input" type="time" value="10:20" required />
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Walk Buffer</label>
+            <div class="pill-row" id="pillar-buffer-pills" role="group" aria-label="Walk buffer minutes">
+              <button type="button" class="pill-choice" data-buffer="10">10m</button>
+              <button type="button" class="pill-choice is-active" data-buffer="15">15m</button>
+              <button type="button" class="pill-choice" data-buffer="20">20m</button>
+              <button type="button" class="pill-choice" data-buffer="25">25m</button>
+            </div>
+          </div>
+
+          <div id="pillar-form-error" class="form-error" role="alert" hidden></div>
+
+          <button id="btn-pillar-submit" type="submit" class="btn btn-primary btn-full">
+            Add Class
+          </button>
+        </form>
+      </section>
+
+      <!-- Account Section -->
+      <section class="settings-section settings-account">
+        <div class="section-heading">
+          <h3>Account</h3>
+          <p id="settings-user-email" class="account-email">Signed in</p>
+        </div>
+
+        <div class="account-actions">
+          <button id="btn-sync-now" type="button" class="btn btn-secondary">
+            Sync Now
+          </button>
+          <button id="btn-sign-out" type="button" class="btn btn-danger-outline">
+            Sign Out
+          </button>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- =======================================================================
+       5. 3-TAP QUICK ADD & EDIT TASK MODAL
+       ======================================================================= -->
+  <div id="task-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="task-modal-title" hidden>
+    <div class="modal-sheet">
+      <div class="modal-handle" aria-hidden="true"></div>
+      <header class="modal-header">
+        <h3 id="task-modal-title">New Task</h3>
+        <button id="btn-task-modal-close" type="button" class="icon-btn" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </header>
+
+      <form id="task-form" class="modal-form" novalidate>
+        <div class="field-group">
+          <label for="task-title-input">Task Title</label>
+          <input
+            id="task-title-input"
+            type="text"
+            placeholder="What needs your focus?"
+            maxlength="220"
+            required
+          />
+        </div>
+
+        <div class="field-group">
+          <label>Course</label>
+          <div class="pill-row" id="task-course-pills" role="group" aria-label="Select course">
+            <button type="button" class="pill-choice" data-course="MA 26100">MA 26100</button>
+            <button type="button" class="pill-choice" data-course="CHM 11510">CHM 11510</button>
+            <button type="button" class="pill-choice" data-course="ENGR 13100">ENGR 13100</button>
+            <button type="button" class="pill-choice" data-course="SLCA 10100">SLCA 10100</button>
+            <button type="button" class="pill-choice is-active" data-course="Personal">Personal</button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label>Due Date</label>
+          <div class="pill-row" id="task-due-pills" role="group" aria-label="Select due date">
+            <button type="button" class="pill-choice is-active" data-due-preset="today">Today</button>
+            <button type="button" class="pill-choice" data-due-preset="tomorrow">Tomorrow</button>
+            <button type="button" class="pill-choice" data-due-preset="pick">Pick Date</button>
+          </div>
+
+          <div id="task-date-picker-wrap" class="conditional-input" hidden>
+            <input id="task-date-input" type="date" aria-label="Pick due date" />
+          </div>
+
+          <div class="inline-toggle-row">
+            <label class="switch-label" for="task-specific-time-toggle">
+              <input id="task-specific-time-toggle" type="checkbox" />
+              <span class="switch-track" aria-hidden="true"></span>
+              <span>Specific due time</span>
+            </label>
+            <input id="task-time-input" type="time" value="23:59" class="compact-time-input" aria-label="Specific due time" hidden />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label>Time Estimate</label>
+          <div class="duration-controls">
+            <div class="pill-row" id="task-duration-pills" role="group" aria-label="Select duration">
+              <button type="button" class="pill-choice" data-duration="15">15m</button>
+              <button type="button" class="pill-choice is-active" data-duration="30">30m</button>
+              <button type="button" class="pill-choice" data-duration="60">1h</button>
+              <button type="button" class="pill-choice" data-duration="120">2h</button>
+            </div>
+            <div class="custom-min-wrap">
+              <input
+                id="task-custom-duration"
+                type="number"
+                min="1"
+                max="720"
+                step="5"
+                inputmode="numeric"
+                placeholder="Min"
+                aria-label="Custom duration in minutes"
+              />
+              <span class="custom-min-unit">m</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="options-stack">
+          <label class="check-card" for="task-all-at-once">
+            <input id="task-all-at-once" type="checkbox" />
+            <span class="check-copy">
+              <strong>All-at-once</strong>
+              <small>Must be done all at once (never suggest starting a partial slice)</small>
+            </span>
+          </label>
+
+          <label class="check-card check-card-gold" for="task-is-starred">
+            <input id="task-is-starred" type="checkbox" />
+            <span class="check-copy">
+              <strong class="gold-label-title">
+                <svg class="inline-star-svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2.4l2.92 5.92 6.53.95-4.73 4.61 1.12 6.5L12 17.3l-5.84 3.08 1.12-6.5-4.73-4.61 6.53-.95L12 2.4z"/>
+                </svg>
+                Star this task
+              </strong>
+              <small>Shiny gold card highlight (visual only)</small>
+            </span>
+          </label>
+        </div>
+
+        <div id="task-form-error" class="form-error" role="alert" hidden></div>
+
+        <div class="modal-footer">
+          <button id="btn-delete-task" type="button" class="btn btn-danger-outline" hidden>
+            Delete Task
+          </button>
+          <button id="btn-task-save" type="submit" class="btn btn-primary modal-save-btn">
+            Add Task
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       6. LATE WARNING CONFIRMATION MODAL
+       ======================================================================= -->
+  <div id="late-modal" class="modal-backdrop modal-backdrop-center" role="alertdialog" aria-modal="true" aria-labelledby="late-modal-title" aria-describedby="late-modal-message" hidden>
+    <div class="confirm-card">
+      <div class="confirm-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      </div>
+      <h3 id="late-modal-title">Heads up</h3>
+      <p id="late-modal-message" class="confirm-message"></p>
+      <div class="confirm-actions">
+        <button id="btn-late-cancel" type="button" class="btn btn-secondary">Cancel</button>
+        <button id="btn-late-proceed" type="button" class="btn btn-primary">Proceed</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subtle Toast Notification -->
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

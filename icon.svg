@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#697DCB"/>
+      <stop offset="100%" stop-color="#4B5EAA"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F6F2EB"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Back stacked card -->
+  <rect x="128" y="114" width="256" height="260" rx="34" fill="#FFFFFF" opacity="0.28"/>
+  <!-- Mid stacked card -->
+  <rect x="112" y="136" width="288" height="256" rx="34" fill="#FFFFFF" opacity="0.52"/>
+  <!-- Front focus card -->
+  <rect x="96" y="162" width="320" height="240" rx="36" fill="url(#card)"/>
+  <!-- Minimal check mark inside front card -->
+  <path d="M192 284 L236 326 L326 236" fill="none" stroke="#5D71BF" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
