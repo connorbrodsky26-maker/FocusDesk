@@ -107,14 +107,23 @@ const dom = {
   contextPill: document.getElementById("context-pill"),
   contextPillText: document.getElementById("context-pill-text"),
   mealsStrip: document.getElementById("meals-strip"),
-  selectMeal1Court: document.getElementById("select-meal-1-court"),
-  selectMeal2Court: document.getElementById("select-meal-2-court"),
-  selectMeal3Court: document.getElementById("select-meal-3-court"),
-  meal3ChipWrap: document.getElementById("meal-3-chip-wrap"),
+  btnOpenMealsSheet: document.getElementById("btn-open-meals-sheet"),
+  mealsSummaryText: document.getElementById("meals-summary-text"),
   focusCardSlot: document.getElementById("focus-card-slot"),
   btnUndo: document.getElementById("btn-undo"),
   btnRedo: document.getElementById("btn-redo"),
   btnAddFab: document.getElementById("btn-add-fab"),
+  btnPlanAddFab: document.getElementById("btn-plan-add-fab"),
+
+  // Today's Meals Bottom Sheet
+  mealsModal: document.getElementById("meals-modal"),
+  btnMealsModalClose: document.getElementById("btn-meals-modal-close"),
+  btnMealsModalDone: document.getElementById("btn-meals-modal-done"),
+  mealsSheetCountGroup: document.getElementById("meals-sheet-count-group"),
+  meal1CourtPills: document.getElementById("meal-1-court-pills"),
+  meal2CourtPills: document.getElementById("meal-2-court-pills"),
+  meal3CourtPills: document.getElementById("meal-3-court-pills"),
+  meal3SheetGroup: document.getElementById("meal-3-sheet-group"),
 
   // Day Plan Tab
   btnPlanPrev: document.getElementById("btn-plan-prev"),
@@ -2112,10 +2121,20 @@ function syncMealsStripUI() {
     btn.setAttribute("aria-pressed", String(active));
   });
 
-  dom.selectMeal1Court.value = s.meal_1_court;
-  dom.selectMeal2Court.value = s.meal_2_court;
-  dom.selectMeal3Court.value = s.meal_3_court;
-  dom.meal3ChipWrap.hidden = s.meals_per_day !== 3;
+  const activeCourts =
+    s.meals_per_day === 3
+      ? [s.meal_1_court, s.meal_2_court, s.meal_3_court]
+      : [s.meal_1_court, s.meal_2_court];
+  dom.mealsSummaryText.textContent = activeCourts.join(" · ");
+
+  // Keep Today's Meals Bottom Sheet pills in sync
+  dom.mealsSheetCountGroup.querySelectorAll("[data-meals-count]").forEach((btn) => {
+    btn.classList.toggle("is-active", Number(btn.dataset.mealsCount) === s.meals_per_day);
+  });
+  setActivePill(dom.meal1CourtPills, "data-court", s.meal_1_court);
+  setActivePill(dom.meal2CourtPills, "data-court", s.meal_2_court);
+  setActivePill(dom.meal3CourtPills, "data-court", s.meal_3_court);
+  dom.meal3SheetGroup.hidden = s.meals_per_day !== 3;
 }
 
 function renderMain({ animateEnter = false } = {}) {
@@ -2350,15 +2369,12 @@ function renderDayPlan() {
           : "";
 
     card.innerHTML = `
-      <div class="plan-card-time">
-        <span>${formatMinuteOfDay(block.startMin)}</span>
-        <span class="plan-card-end">${formatMinuteOfDay(block.endMin)}</span>
+      <div class="plan-card-header">
+        <span class="plan-card-time">${formatMinuteOfDay(block.startMin)} – ${formatMinuteOfDay(block.endMin)}</span>
+        ${rightControlHtml}
       </div>
       <div class="plan-card-body">
-        <div class="plan-card-top">
-          <h4 class="plan-card-title">${block.isStarred ? "★ " : ""}${escapeHtml(block.title)}</h4>
-          ${rightControlHtml}
-        </div>
+        <h4 class="plan-card-title">${block.isStarred ? "★ " : ""}${escapeHtml(block.title)}</h4>
         ${block.meta ? `<div class="plan-card-meta">${escapeHtml(block.meta)}</div>` : ""}
       </div>
     `;
@@ -2943,6 +2959,7 @@ function showAuthView() {
   dom.lateModal.hidden = true;
   dom.sleepAlertModal.hidden = true;
   dom.moveRunModal.hidden = true;
+  dom.mealsModal.hidden = true;
 }
 
 async function initAuthAndSync() {
@@ -3037,6 +3054,7 @@ function bindEvents() {
   dom.btnAllTasks.addEventListener("click", openCarouselView);
   dom.btnSettings.addEventListener("click", openSettingsView);
   dom.btnAddFab.addEventListener("click", () => openTaskModal(null));
+  dom.btnPlanAddFab.addEventListener("click", () => openTaskModal(null));
   dom.btnUndo.addEventListener("click", handleUndo);
   dom.btnRedo.addEventListener("click", handleRedo);
 
@@ -3044,7 +3062,7 @@ function bindEvents() {
   dom.tabBtnFocus.addEventListener("click", () => setActiveTab("focus"));
   dom.tabBtnPlan.addEventListener("click", () => setActiveTab("plan"));
 
-  // Focus Tab: Today's Meals Strip (2 Meals | 3 Meals & Dining Court selectors)
+  // Focus Tab: Single-Row Today's Meals Bar & iPhone Bottom Sheet
   dom.mealsStrip.addEventListener("click", (e) => {
     const seg = e.target.closest("[data-meals-count]");
     if (!seg) return;
@@ -3054,14 +3072,54 @@ function bindEvents() {
     showToast(`${count} meals scheduled`);
   });
 
-  dom.selectMeal1Court.addEventListener("change", () => {
-    saveUserSettings({ meal_1_court: dom.selectMeal1Court.value }, { silentToast: true });
+  dom.btnOpenMealsSheet.addEventListener("click", () => {
+    syncMealsStripUI();
+    dom.mealsModal.hidden = false;
   });
-  dom.selectMeal2Court.addEventListener("change", () => {
-    saveUserSettings({ meal_2_court: dom.selectMeal2Court.value }, { silentToast: true });
+
+  const closeMealsModal = () => {
+    dom.mealsModal.hidden = true;
+  };
+  dom.btnMealsModalClose.addEventListener("click", closeMealsModal);
+  dom.btnMealsModalDone.addEventListener("click", closeMealsModal);
+  dom.mealsModal.addEventListener("click", (e) => {
+    if (e.target === dom.mealsModal) closeMealsModal();
   });
-  dom.selectMeal3Court.addEventListener("change", () => {
-    saveUserSettings({ meal_3_court: dom.selectMeal3Court.value }, { silentToast: true });
+
+  dom.mealsSheetCountGroup.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-meals-count]");
+    if (!btn) return;
+    const count = Number(btn.dataset.mealsCount) === 3 ? 3 : 2;
+    if (getSettings().meals_per_day === count) return;
+    saveUserSettings({ meals_per_day: count }, { silentToast: true });
+  });
+
+  dom.meal1CourtPills.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-court]");
+    if (!btn) return;
+    saveUserSettings({ meal_1_court: btn.dataset.court }, { silentToast: true });
+  });
+  dom.meal2CourtPills.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-court]");
+    if (!btn) return;
+    saveUserSettings({ meal_2_court: btn.dataset.court }, { silentToast: true });
+  });
+  dom.meal3CourtPills.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-court]");
+    if (!btn) return;
+    saveUserSettings({ meal_3_court: btn.dataset.court }, { silentToast: true });
+  });
+
+  // Settings Custom Single-Chevron Accordions (avoids iOS Safari duplicate <details> markers)
+  dom.settingsView.addEventListener("click", (e) => {
+    const trigger = e.target.closest("[data-accordion-target]");
+    if (!trigger) return;
+    const targetName = trigger.dataset.accordionTarget;
+    const panel = dom.settingsView.querySelector(`[data-accordion-panel="${targetName}"]`);
+    if (!panel) return;
+    const willOpen = panel.hidden;
+    panel.hidden = !willOpen;
+    trigger.setAttribute("aria-expanded", String(willOpen));
   });
 
   // Day Plan Navigation & Re-flow from Now
@@ -3505,7 +3563,9 @@ function bindEvents() {
     }
 
     if (e.key === "Escape") {
-      if (!dom.moveRunModal.hidden) {
+      if (!dom.mealsModal.hidden) {
+        dom.mealsModal.hidden = true;
+      } else if (!dom.moveRunModal.hidden) {
         dom.moveRunModal.hidden = true;
       } else if (!dom.sleepAlertModal.hidden) {
         dom.sleepAlertModal.hidden = true;

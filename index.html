@@ -36,7 +36,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="./styles.css?v=2" />
+  <link rel="stylesheet" href="./styles.css?v=3" />
 </head>
 <body>
   <!-- =======================================================================
@@ -89,7 +89,7 @@
   </section>
 
   <!-- =======================================================================
-       2. MAIN APPLICATION SHELL (2-TAB: FOCUS | DAY PLAN)
+       2. MAIN APPLICATION SHELL (IPHONE-FIRST 2-TAB: FOCUS | DAY PLAN)
        ======================================================================= -->
   <div id="app-view" class="app-view">
     <!-- Top Header Bar -->
@@ -127,7 +127,7 @@
     </header>
 
     <!-- =====================================================================
-         TAB 1: FOCUS (SINGLE FLASHCARD + TODAY'S MEALS STRIP + UNDO/REDO)
+         TAB 1: FOCUS (SINGLE FLASHCARD + COMPACT 1-LINE MEALS BAR + CONTROLS)
          ===================================================================== -->
     <div id="tab-focus-panel" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-focus">
       <main class="focus-stage" aria-live="polite">
@@ -137,58 +137,27 @@
           <span id="context-pill-text">Open Study Block</span>
         </div>
 
-        <!-- Compact Low-Profile Today's Meals Strip -->
-        <section id="meals-strip" class="meals-strip" aria-label="Today's meals and dining courts">
+        <!-- Clean Single-Row Today's Meals Bar (iPhone-friendly) -->
+        <div id="meals-strip" class="meals-bar" aria-label="Today's meals and dining courts">
           <div class="meals-segmented" role="group" aria-label="Meals per day">
             <button type="button" class="meals-seg-btn is-active" data-meals-count="2" aria-pressed="true">2 Meals</button>
             <button type="button" class="meals-seg-btn" data-meals-count="3" aria-pressed="false">3 Meals</button>
           </div>
 
-          <div id="meals-courts-row" class="meals-courts-row">
-            <label class="meal-court-chip">
-              <span class="meal-chip-tag">M1</span>
-              <select id="select-meal-1-court" aria-label="Meal 1 dining court">
-                <option value="Wiley">Wiley</option>
-                <option value="Ford">Ford</option>
-                <option value="Earhart">Earhart</option>
-                <option value="Windsor">Windsor</option>
-                <option value="Hillenbrand">Hillenbrand</option>
-                <option value="Off-Campus">Off-Campus</option>
-              </select>
-            </label>
-
-            <label class="meal-court-chip">
-              <span class="meal-chip-tag">M2</span>
-              <select id="select-meal-2-court" aria-label="Meal 2 dining court">
-                <option value="Wiley">Wiley</option>
-                <option value="Ford">Ford</option>
-                <option value="Earhart">Earhart</option>
-                <option value="Windsor">Windsor</option>
-                <option value="Hillenbrand">Hillenbrand</option>
-                <option value="Off-Campus">Off-Campus</option>
-              </select>
-            </label>
-
-            <label id="meal-3-chip-wrap" class="meal-court-chip" hidden>
-              <span class="meal-chip-tag">M3</span>
-              <select id="select-meal-3-court" aria-label="Meal 3 dining court">
-                <option value="Wiley">Wiley</option>
-                <option value="Ford">Ford</option>
-                <option value="Earhart">Earhart</option>
-                <option value="Windsor">Windsor</option>
-                <option value="Hillenbrand">Hillenbrand</option>
-                <option value="Off-Campus">Off-Campus</option>
-              </select>
-            </label>
-          </div>
-        </section>
+          <button id="btn-open-meals-sheet" type="button" class="meals-summary-btn" aria-label="Choose dining courts">
+            <span id="meals-summary-text">Wiley · Ford</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+        </div>
 
         <!-- Dynamic Focus Card Container -->
         <div id="focus-card-slot" class="focus-card-slot"></div>
       </main>
 
-      <!-- Permanent Compact Undo / Redo Bar (Done & Later Today only) -->
-      <div class="bottom-controls">
+      <!-- Bottom Row: Permanent Undo/Redo (Left) + Large Circular '+' Button (Right) -->
+      <div class="focus-action-bar">
         <div class="history-bar" role="group" aria-label="Undo and Redo">
           <button id="btn-undo" type="button" class="history-btn" disabled title="Undo (Ctrl+Z)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -206,18 +175,31 @@
             </svg>
           </button>
         </div>
+
+        <button
+          id="btn-add-fab"
+          type="button"
+          class="fab-add-inline"
+          aria-label="Add new task"
+          title="Add Task"
+        >
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
       </div>
     </div>
 
     <!-- =====================================================================
-         TAB 2: DAY PLAN (CALM ANTI-FATIGUE SINGLE-DAY TIMELINE)
+         TAB 2: DAY PLAN (IPHONE-FIRST SINGLE-DAY VERTICAL TIMELINE)
          ===================================================================== -->
     <div id="tab-plan-panel" class="tab-panel tab-panel-plan" role="tabpanel" aria-labelledby="tab-btn-plan" hidden>
-      <!-- Day Navigation & Re-flow Bar -->
+      <!-- Clean iPhone Day Navigation & Re-flow Toolbar -->
       <div class="plan-toolbar">
         <div class="day-nav" role="group" aria-label="Navigate day">
           <button id="btn-plan-prev" type="button" class="day-nav-arrow" aria-label="Previous day" title="Previous day">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="15 18 9 12 15 6"></polyline>
             </svg>
           </button>
@@ -225,18 +207,18 @@
             Today
           </button>
           <button id="btn-plan-next" type="button" class="day-nav-arrow" aria-label="Next day" title="Next day">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           </button>
         </div>
 
-        <button id="btn-reflow-now" type="button" class="reflow-btn" title="Re-slot remaining tasks and meals starting from right now">
+        <button id="btn-reflow-now" type="button" class="reflow-btn" aria-label="Re-flow from Now" title="Re-flow from Now">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="23 4 23 10 17 10"></polyline>
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
           </svg>
-          <span>Re-flow from Now</span>
+          <span>Re-flow Now</span>
         </button>
       </div>
 
@@ -247,26 +229,26 @@
       <div id="plan-timeline-scroll" class="plan-timeline-scroll">
         <div id="plan-timeline-list" class="plan-timeline-list"></div>
       </div>
-    </div>
 
-    <!-- Floating Add Button -->
-    <button
-      id="btn-add-fab"
-      type="button"
-      class="fab-add"
-      aria-label="Add new task"
-      title="Add Task"
-    >
-      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" aria-hidden="true">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
-    </button>
+      <!-- Floating '+' Button on Day Plan Tab -->
+      <button
+        id="btn-plan-add-fab"
+        type="button"
+        class="fab-add-floating"
+        aria-label="Add new task"
+        title="Add Task"
+      >
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+    </div>
 
     <!-- Clean 2-Tab Bottom Navigation Bar -->
     <nav class="bottom-tabs" role="tablist" aria-label="Main navigation">
       <button id="tab-btn-focus" type="button" class="bottom-tab is-active" role="tab" aria-selected="true" aria-controls="tab-focus-panel">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="4" y="5" width="16" height="14" rx="3"></rect>
           <path d="M9 12l2 2 4-4"></path>
         </svg>
@@ -274,7 +256,7 @@
       </button>
 
       <button id="tab-btn-plan" type="button" class="bottom-tab" role="tab" aria-selected="false" aria-controls="tab-plan-panel">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="3" y="4" width="18" height="18" rx="3"></rect>
           <line x1="16" y1="2" x2="16" y2="6"></line>
           <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -286,7 +268,75 @@
   </div>
 
   <!-- =======================================================================
-       3. ALL TASKS — SMOOTH HORIZONTAL PEEK CAROUSEL OVERLAY
+       3. TODAY'S MEALS BOTTOM SHEET (BIG THUMB-FRIENDLY IPHONE PILLS)
+       ======================================================================= -->
+  <div id="meals-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="meals-modal-title" hidden>
+    <div class="modal-sheet">
+      <div class="modal-handle" aria-hidden="true"></div>
+      <header class="modal-header">
+        <h3 id="meals-modal-title">Today's Meals</h3>
+        <button id="btn-meals-modal-close" type="button" class="icon-btn" aria-label="Close meals sheet">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </header>
+
+      <div class="modal-form">
+        <div class="field-group">
+          <label>How many meals today?</label>
+          <div class="meals-sheet-seg" id="meals-sheet-count-group" role="group" aria-label="Meals per day">
+            <button type="button" class="meals-sheet-seg-btn is-active" data-meals-count="2">2 Meals</button>
+            <button type="button" class="meals-sheet-seg-btn" data-meals-count="3">3 Meals</button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label>Meal 1 Dining Court</label>
+          <div class="pill-row pill-row-touch" id="meal-1-court-pills" role="group" aria-label="Meal 1 dining court">
+            <button type="button" class="pill-choice" data-court="Wiley">Wiley</button>
+            <button type="button" class="pill-choice" data-court="Ford">Ford</button>
+            <button type="button" class="pill-choice" data-court="Earhart">Earhart</button>
+            <button type="button" class="pill-choice" data-court="Windsor">Windsor</button>
+            <button type="button" class="pill-choice" data-court="Hillenbrand">Hillenbrand</button>
+            <button type="button" class="pill-choice" data-court="Off-Campus">Off-Campus</button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label>Meal 2 Dining Court</label>
+          <div class="pill-row pill-row-touch" id="meal-2-court-pills" role="group" aria-label="Meal 2 dining court">
+            <button type="button" class="pill-choice" data-court="Wiley">Wiley</button>
+            <button type="button" class="pill-choice" data-court="Ford">Ford</button>
+            <button type="button" class="pill-choice" data-court="Earhart">Earhart</button>
+            <button type="button" class="pill-choice" data-court="Windsor">Windsor</button>
+            <button type="button" class="pill-choice" data-court="Hillenbrand">Hillenbrand</button>
+            <button type="button" class="pill-choice" data-court="Off-Campus">Off-Campus</button>
+          </div>
+        </div>
+
+        <div id="meal-3-sheet-group" class="field-group" hidden>
+          <label>Meal 3 Dining Court</label>
+          <div class="pill-row pill-row-touch" id="meal-3-court-pills" role="group" aria-label="Meal 3 dining court">
+            <button type="button" class="pill-choice" data-court="Wiley">Wiley</button>
+            <button type="button" class="pill-choice" data-court="Ford">Ford</button>
+            <button type="button" class="pill-choice" data-court="Earhart">Earhart</button>
+            <button type="button" class="pill-choice" data-court="Windsor">Windsor</button>
+            <button type="button" class="pill-choice" data-court="Hillenbrand">Hillenbrand</button>
+            <button type="button" class="pill-choice" data-court="Off-Campus">Off-Campus</button>
+          </div>
+        </div>
+
+        <button id="btn-meals-modal-done" type="button" class="btn btn-primary btn-full">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       4. ALL TASKS — SMOOTH HORIZONTAL PEEK CAROUSEL OVERLAY
        ======================================================================= -->
   <section id="carousel-view" class="overlay-view" aria-label="All Tasks" hidden>
     <header class="overlay-header">
@@ -320,7 +370,7 @@
   </section>
 
   <!-- =======================================================================
-       4. SETTINGS VIEW (COLLAPSIBLE SECTIONS + .ICS + MEALS + SLEEP + PILLARS)
+       5. SETTINGS VIEW (SINGLE CLEAN CHEVRON PER SECTION, CALENDAR AT BOTTOM)
        ======================================================================= -->
   <section id="settings-view" class="overlay-view" aria-label="Settings" hidden>
     <header class="overlay-header">
@@ -338,45 +388,18 @@
     </header>
 
     <div class="settings-content">
-      <!-- 1. iPhone Calendar Subscription -->
-      <details class="settings-accordion" open>
-        <summary class="settings-accordion-summary">
-          <div>
-            <h3>iPhone Calendar Subscription</h3>
-            <p>Live .ics feed of meals, runs, study blocks, showers, and sleep</p>
-          </div>
-          <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </summary>
-        <div class="settings-accordion-body">
-          <div class="ics-box">
-            <input id="settings-ics-url" type="text" readonly aria-label="Personal iPhone Calendar subscription URL" />
-            <button id="btn-copy-ics" type="button" class="btn btn-primary btn-full">
-              Copy Calendar Link
-            </button>
-          </div>
-          <p class="settings-help-note">
-            <strong>How to subscribe:</strong> iPhone Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, then paste this link.
-          </p>
-          <p class="settings-help-note is-muted">
-            Classes are intentionally excluded from this feed so they never duplicate your existing Apple Calendar schedule.
-          </p>
-        </div>
-      </details>
-
-      <!-- 2. Meals & Windows -->
-      <details class="settings-accordion">
-        <summary class="settings-accordion-summary">
-          <div>
+      <!-- 1. Meals & Windows -->
+      <section class="settings-card">
+        <button type="button" class="settings-accordion-btn" data-accordion-target="acc-meals" aria-expanded="false">
+          <div class="settings-accordion-copy">
             <h3>Meals &amp; Windows</h3>
-            <p>Preferred eating windows paired with live Purdue Dining hours</p>
+            <p>Preferred eating windows for Purdue Dining</p>
           </div>
           <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
-        </summary>
-        <form id="meals-settings-form" class="settings-accordion-body settings-form-stack" novalidate>
+        </button>
+        <form id="meals-settings-form" data-accordion-panel="acc-meals" class="settings-accordion-body settings-form-stack" hidden novalidate>
           <div class="window-block">
             <span class="window-block-title">Meal 1 Window</span>
             <div class="field-row-2">
@@ -406,7 +429,7 @@
           </div>
 
           <div class="window-block">
-            <span class="window-block-title">Meal 3 Window (when 3 Meals selected)</span>
+            <span class="window-block-title">Meal 3 Window (3 Meals mode)</span>
             <div class="field-row-2">
               <div class="field-group">
                 <label for="set-meal3-start">Start</label>
@@ -421,20 +444,20 @@
 
           <button type="submit" class="btn btn-primary btn-full">Save Meal Windows</button>
         </form>
-      </details>
+      </section>
 
-      <!-- 3. Sleep, Showers & Runs -->
-      <details class="settings-accordion">
-        <summary class="settings-accordion-summary">
-          <div>
+      <!-- 2. Sleep, Showers & Runs -->
+      <section class="settings-card">
+        <button type="button" class="settings-accordion-btn" data-accordion-target="acc-wellness" aria-expanded="false">
+          <div class="settings-accordion-copy">
             <h3>Sleep, Showers &amp; Runs</h3>
-            <p>Protect 8h sleep (7h floor), night showers, wake-up, and 2x/wk runs</p>
+            <p>8h sleep goal (7h floor), showers &amp; weekly runs</p>
           </div>
           <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
-        </summary>
-        <form id="wellness-settings-form" class="settings-accordion-body settings-form-stack" novalidate>
+        </button>
+        <form id="wellness-settings-form" data-accordion-panel="acc-wellness" class="settings-accordion-body settings-form-stack" hidden novalidate>
           <div class="field-row-2">
             <div class="field-group">
               <label for="set-pref-sleep">Preferred Sleep (hrs)</label>
@@ -452,7 +475,7 @@
               <input id="set-evening-shower" type="number" min="10" max="90" step="5" value="40" required />
             </div>
             <div class="field-group">
-              <label for="set-noclass-wake">No-Class Wake Time</label>
+              <label for="set-noclass-wake">No-Class Wake</label>
               <input id="set-noclass-wake" type="time" value="08:30" required />
             </div>
           </div>
@@ -479,20 +502,20 @@
 
           <button type="submit" class="btn btn-primary btn-full">Save Sleep &amp; Run Settings</button>
         </form>
-      </details>
+      </section>
 
-      <!-- 4. Weekly Class Pillars -->
-      <details class="settings-accordion">
-        <summary class="settings-accordion-summary">
-          <div>
+      <!-- 3. Weekly Class Pillars -->
+      <section class="settings-card">
+        <button type="button" class="settings-accordion-btn" data-accordion-target="acc-pillars" aria-expanded="false">
+          <div class="settings-accordion-copy">
             <h3>Weekly Class Pillars</h3>
-            <p>Recurring classes, walk-out buffers, and dynamic wake-up anchor</p>
+            <p>Recurring classes, walk buffers &amp; wake-up anchor</p>
           </div>
           <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
-        </summary>
-        <div class="settings-accordion-body settings-form-stack">
+        </button>
+        <div data-accordion-panel="acc-pillars" class="settings-accordion-body settings-form-stack" hidden>
           <div id="pillars-list" class="pillars-list"></div>
 
           <form id="pillar-form" class="pillar-form-card" novalidate>
@@ -557,7 +580,34 @@
             </button>
           </form>
         </div>
-      </details>
+      </section>
+
+      <!-- 4. iPhone Calendar Subscription (At Bottom — One-Time Setup) -->
+      <section class="settings-card">
+        <button type="button" class="settings-accordion-btn" data-accordion-target="acc-calendar" aria-expanded="false">
+          <div class="settings-accordion-copy">
+            <h3>iPhone Calendar Subscription</h3>
+            <p>One-time .ics link for Apple Calendar</p>
+          </div>
+          <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div data-accordion-panel="acc-calendar" class="settings-accordion-body" hidden>
+          <div class="ics-box">
+            <input id="settings-ics-url" type="text" readonly aria-label="Personal iPhone Calendar subscription URL" />
+            <button id="btn-copy-ics" type="button" class="btn btn-primary btn-full">
+              Copy Calendar Link
+            </button>
+          </div>
+          <p class="settings-help-note">
+            <strong>How to subscribe:</strong> iPhone Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, then paste this link.
+          </p>
+          <p class="settings-help-note is-muted">
+            Classes are intentionally excluded from this feed so they never duplicate your existing Apple Calendar schedule.
+          </p>
+        </div>
+      </section>
 
       <!-- Account Section -->
       <section class="settings-section settings-account">
@@ -579,7 +629,7 @@
   </section>
 
   <!-- =======================================================================
-       5. 3-TAP QUICK ADD & EDIT TASK MODAL
+       6. 3-TAP QUICK ADD & EDIT TASK MODAL
        ======================================================================= -->
   <div id="task-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="task-modal-title" hidden>
     <div class="modal-sheet">
@@ -702,7 +752,7 @@
   </div>
 
   <!-- =======================================================================
-       6. LATE WARNING CONFIRMATION MODAL
+       7. LATE WARNING CONFIRMATION MODAL
        ======================================================================= -->
   <div id="late-modal" class="modal-backdrop modal-backdrop-center" role="alertdialog" aria-modal="true" aria-labelledby="late-modal-title" aria-describedby="late-modal-message" hidden>
     <div class="confirm-card">
@@ -722,7 +772,7 @@
   </div>
 
   <!-- =======================================================================
-       7. PROTECT YOUR SLEEP — USE AI TONIGHT MODAL
+       8. PROTECT YOUR SLEEP — USE AI TONIGHT MODAL
        ======================================================================= -->
   <div id="sleep-alert-modal" class="modal-backdrop modal-backdrop-center" role="alertdialog" aria-modal="true" aria-labelledby="sleep-alert-title" aria-describedby="sleep-alert-message" hidden>
     <div class="confirm-card sleep-alert-card">
@@ -741,7 +791,7 @@
   </div>
 
   <!-- =======================================================================
-       8. MOVE RUN DAY PICKER MODAL
+       9. MOVE RUN DAY PICKER MODAL
        ======================================================================= -->
   <div id="move-run-modal" class="modal-backdrop modal-backdrop-center" role="dialog" aria-modal="true" aria-labelledby="move-run-title" hidden>
     <div class="confirm-card move-run-card">
@@ -755,6 +805,6 @@
   <!-- Subtle Toast Notification -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script type="module" src="./app.js?v=2"></script>
+  <script type="module" src="./app.js?v=3"></script>
 </body>
 </html>
