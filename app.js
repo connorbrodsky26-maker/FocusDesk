@@ -70,6 +70,7 @@ const state = {
   pendingWrites: 0,
   plannedSyncTimer: null,
   plannedSyncVersion: 0,
+  lastPlannedEventsSig: null,
   isAnimatingCard: false,
   editingTaskId: null,
   deleteConfirmArmed: false,
@@ -191,10 +192,16 @@ const dom = {
   taskDuePills: document.getElementById("task-due-pills"),
   taskDatePickerWrap: document.getElementById("task-date-picker-wrap"),
   taskDateInput: document.getElementById("task-date-input"),
+  taskFixedPlanCard: document.getElementById("task-fixed-plan-card"),
+  taskFixedTimeToggle: document.getElementById("task-fixed-time-toggle"),
+  taskFixedStartWrap: document.getElementById("task-fixed-start-wrap"),
+  taskFixedStartTime: document.getElementById("task-fixed-start-time"),
+  taskSpecificTimeRow: document.getElementById("task-specific-time-row"),
   taskSpecificTimeToggle: document.getElementById("task-specific-time-toggle"),
   taskTimeInput: document.getElementById("task-time-input"),
   taskDurationPills: document.getElementById("task-duration-pills"),
   taskCustomDuration: document.getElementById("task-custom-duration"),
+  taskAllAtOnceCard: document.getElementById("task-all-at-once-card"),
   taskAllAtOnce: document.getElementById("task-all-at-once"),
   taskIsStarred: document.getElementById("task-is-starred"),
   taskFormError: document.getElementById("task-form-error"),
@@ -487,6 +494,17 @@ function getSettings() {
   return state.userSettings;
 }
 
+function getNextRoundedHalfHourHHMM(now = new Date()) {
+  const totalMin = now.getHours() * 60 + now.getMinutes();
+  const rounded = Math.ceil((totalMin + 1) / 30) * 30;
+  const clamped = Math.min(23 * 60 + 30, rounded);
+  return `${pad2(Math.floor(clamped / 60))}:${pad2(clamped % 60)}`;
+}
+
+function isFixedPersonalPlan(task) {
+  return Boolean(task && task.is_fixed_time && String(task.course || "").toLowerCase() === "personal");
+}
+
 function normalizeTask(row) {
   return {
     id: row.id,
@@ -497,6 +515,7 @@ function normalizeTask(row) {
     duration_minutes: Math.max(1, Number(row.duration_minutes) || 30),
     all_at_once: Boolean(row.all_at_once),
     is_starred: Boolean(row.is_starred),
+    is_fixed_time: Boolean(row.is_fixed_time),
     status: row.status === "completed" ? "completed" : "active",
     sort_order: Number(row.sort_order) || 0,
     created_at: row.created_at || new Date().toISOString()
@@ -853,23 +872,33 @@ function schedulePlannedEventsSync() {
   }, 1100);
 }
 
-async function syncPlannedEventsToSupabase() {
-  if (!state.user || !navigator.onLine || !state.latestSevenDayPlan) return;
-
-  const myVersion = ++state.plannedSyncVersion;
-  const now = new Date();
-  const startOfToday = addLocalDays(now, 0);
-  const horizonStartIso = startOfToday.toISOString();
-
-  // Gather upcoming 7 days (offsets 0..6) of non-class blocks: meal, run, study, shower, sleep
+function buildPlannedEventsRows(plan, userId) {
   const rows = [];
+  if (!plan || !userId) return rows;
+
+  const allowedTypes = new Set(["personal", "meal", "run", "study", "shower"]);
+
   for (let offset = 0; offset <= 6; offset++) {
-    const dayPlan = state.latestSevenDayPlan.days[offset];
+    const dayPlan = plan.days[offset];
     if (!dayPlan) continue;
+
+    // 1. Point-in-time Wake Up milestone (start_at === end_at)
+    const wakeIso = dateFromDayAndMinute(dayPlan.date, dayPlan.wakeMin).toISOString();
+    rows.push({
+      user_id: userId,
+      event_type: "wake",
+      title: "Wake Up",
+      location: "",
+      notes: "",
+      start_at: wakeIso,
+      end_at: wakeIso
+    });
+
+    // 2. Scheduled non-class blocks: personal, meal, run, study, shower
     for (const block of dayPlan.blocks) {
-      if (!["meal", "run", "study", "shower", "sleep"].includes(block.eventType)) continue;
+      if (!allowedTypes.has(block.eventType)) continue;
       rows.push({
-        user_id: state.user.id,
+        user_id: userId,
         event_type: block.eventType,
         title: block.icsTitle || block.title,
         location: block.location || "",
@@ -878,7 +907,43 @@ async function syncPlannedEventsToSupabase() {
         end_at: dateFromDayAndMinute(dayPlan.date, block.endMin).toISOString()
       });
     }
+
+    // 3. Point-in-time Bedtime milestone (start_at === end_at, event_type: "sleep" keeps 15m pre-bed alert)
+    const bedIso = dateFromDayAndMinute(dayPlan.date, dayPlan.actualBedMin).toISOString();
+    rows.push({
+      user_id: userId,
+      event_type: "sleep",
+      title: `Bedtime (${formatSleepHoursLabel(dayPlan.actualSleepHours)} sleep)`,
+      location: "",
+      notes: `Wake at ${formatMinuteOfDay(dayPlan.tomorrowWakeMin)} tomorrow`,
+      start_at: bedIso,
+      end_at: bedIso
+    });
   }
+
+  return rows;
+}
+
+function computePlannedEventsSignature(rows) {
+  return JSON.stringify(rows.map((r) => [r.event_type, r.title, r.start_at, r.end_at]));
+}
+
+async function syncPlannedEventsToSupabase() {
+  if (!state.user || !navigator.onLine || !state.latestSevenDayPlan) return;
+
+  const now = new Date();
+  const startOfToday = addLocalDays(now, 0);
+  const horizonStartIso = startOfToday.toISOString();
+
+  const rows = buildPlannedEventsRows(state.latestSevenDayPlan, state.user.id);
+  const nextSig = computePlannedEventsSignature(rows);
+
+  // Avoid redundant planned_events delete/insert writes on app resume when nothing changed
+  if (nextSig === state.lastPlannedEventsSig) {
+    return;
+  }
+
+  const myVersion = ++state.plannedSyncVersion;
 
   await runSupabaseWrite(async () => {
     if (myVersion !== state.plannedSyncVersion) return { error: null };
@@ -896,6 +961,8 @@ async function syncPlannedEventsToSupabase() {
       const insRes = await supabase.from("planned_events").insert(rows);
       if (insRes.error) return { error: insRes.error };
     }
+
+    state.lastPlannedEventsSig = nextSig;
     return { error: null };
   });
 }
@@ -945,8 +1012,9 @@ async function syncFromSupabase(showFeedback = false) {
 // V1 SMART SORTING & BETWEEN-CLASS "GAP-FIT OVERRIDE" ENGINE
 // Note: is_starred is strictly visual and NEVER influences task ordering.
 // ============================================================================
-function getActiveGapContext(pillars, now = new Date()) {
+function getActiveGapContext(pillars, now = new Date(), tasks = state.tasks) {
   const todayDow = now.getDay(); // 0=Sun ... 6=Sat
+  const todayKey = toLocalDateKey(now);
   const nowExactMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
 
   const upcoming = [];
@@ -958,7 +1026,28 @@ function getActiveGapContext(pillars, now = new Date()) {
     const buffer = Number.isFinite(pillar.walk_buffer_minutes) ? pillar.walk_buffer_minutes : 15;
     const walkOutMin = startMin - buffer;
     if (nowExactMin < walkOutMin) {
-      upcoming.push({ pillar, walkOutMin, startMin });
+      upcoming.push({ pillar, walkOutMin, startMin, kind: "class" });
+    }
+  }
+
+  // Also include today's upcoming fixed-time personal plans (10m transition buffer)
+  for (const task of tasks || []) {
+    if (task.status !== "active" || !isFixedPersonalPlan(task)) continue;
+    const dueDate = new Date(task.due_at);
+    if (Number.isNaN(dueDate.getTime()) || toLocalDateKey(dueDate) !== todayKey) continue;
+    const startMin = dueDate.getHours() * 60 + dueDate.getMinutes();
+    const walkOutMin = startMin - 10;
+    if (nowExactMin < walkOutMin) {
+      upcoming.push({
+        pillar: {
+          id: task.id,
+          name: task.title,
+          start_time: `${pad2(dueDate.getHours())}:${pad2(dueDate.getMinutes())}`
+        },
+        walkOutMin,
+        startMin,
+        kind: "personal"
+      });
     }
   }
 
@@ -972,13 +1061,14 @@ function getActiveGapContext(pillars, now = new Date()) {
         isGap: true,
         availableMinutes,
         pillar: next.pillar,
+        kind: next.kind,
         walkOutMin: next.walkOutMin,
-        gapKey: `${toLocalDateKey(now)}_${next.pillar.id}_${next.pillar.start_time}`
+        gapKey: `${todayKey}_${next.kind}_${next.pillar.id}_${next.pillar.start_time}`
       };
     }
   }
 
-  return { isGap: false, availableMinutes: null, pillar: null, gapKey: null };
+  return { isGap: false, availableMinutes: null, pillar: null, kind: null, gapKey: null };
 }
 
 function getBucketKey(task, now = new Date()) {
@@ -1050,49 +1140,55 @@ function buildOrderedQueue(tasks, now = new Date(), { alternate = true } = {}) {
 }
 
 function computeFocusState(now = new Date()) {
-  const activeTasks = state.tasks.filter((t) => t.status === "active");
-  const gap = getActiveGapContext(state.pillars, now);
-  const openQueue = buildOrderedQueue(activeTasks, now, { alternate: true });
+  const allActiveTasks = state.tasks.filter((t) => t.status === "active");
+  // Exclude fixed-time personal plans from hijacking the Focus study card stack (keep editable in Day Plan & All Tasks)
+  const studyTasks = allActiveTasks.filter((t) => !isFixedPersonalPlan(t));
+  const fixedPlans = allActiveTasks
+    .filter((t) => isFixedPersonalPlan(t))
+    .sort(compareByDueAndCreated);
 
-  if (activeTasks.length === 0) {
+  const gap = getActiveGapContext(state.pillars, now, allActiveTasks);
+  const openQueue = buildOrderedQueue(studyTasks, now, { alternate: true });
+
+  if (studyTasks.length === 0) {
     return {
       mode: "empty",
       gap,
       focusTask: null,
       sliceMinutes: null,
-      carouselQueue: [],
-      activeCount: 0
+      carouselQueue: fixedPlans,
+      activeCount: allActiveTasks.length
     };
   }
 
   const bypassBreak = gap.isGap && state.bypassBreakGapKey === gap.gapKey;
 
   if (gap.isGap && !bypassBreak) {
-    const gapQueue = buildOrderedQueue(activeTasks, now, { alternate: false });
+    const gapQueue = buildOrderedQueue(studyTasks, now, { alternate: false });
 
     const fitting = gapQueue.find((t) => t.duration_minutes <= gap.availableMinutes);
     if (fitting) {
-      const carouselQueue = [fitting, ...openQueue.filter((t) => t.id !== fitting.id)];
+      const carouselQueue = [fitting, ...openQueue.filter((t) => t.id !== fitting.id), ...fixedPlans];
       return {
         mode: "task",
         gap,
         focusTask: fitting,
         sliceMinutes: null,
         carouselQueue,
-        activeCount: activeTasks.length
+        activeCount: allActiveTasks.length
       };
     }
 
     const sliceable = gapQueue.find((t) => !t.all_at_once);
     if (sliceable) {
-      const carouselQueue = [sliceable, ...openQueue.filter((t) => t.id !== sliceable.id)];
+      const carouselQueue = [sliceable, ...openQueue.filter((t) => t.id !== sliceable.id), ...fixedPlans];
       return {
         mode: "task",
         gap,
         focusTask: sliceable,
         sliceMinutes: gap.availableMinutes,
         carouselQueue,
-        activeCount: activeTasks.length
+        activeCount: allActiveTasks.length
       };
     }
 
@@ -1101,8 +1197,8 @@ function computeFocusState(now = new Date()) {
       gap,
       focusTask: null,
       sliceMinutes: null,
-      carouselQueue: openQueue,
-      activeCount: activeTasks.length
+      carouselQueue: [...openQueue, ...fixedPlans],
+      activeCount: allActiveTasks.length
     };
   }
 
@@ -1111,8 +1207,8 @@ function computeFocusState(now = new Date()) {
     gap,
     focusTask: openQueue[0],
     sliceMinutes: null,
-    carouselQueue: openQueue,
-    activeCount: activeTasks.length
+    carouselQueue: [...openQueue, ...fixedPlans],
+    activeCount: allActiveTasks.length
   };
 }
 
@@ -1121,6 +1217,7 @@ function computeFocusState(now = new Date()) {
 // ============================================================================
 function computeDynamicWakeInfo(dayDate, pillars, settings) {
   const dow = dayDate.getDay();
+  const latestWakeMin = parseHHMM(settings.no_class_wake_time || "08:30");
   const dayClasses = pillars
     .filter((p) => Array.isArray(p.days_of_week) && p.days_of_week.includes(dow))
     .slice()
@@ -1128,7 +1225,7 @@ function computeDynamicWakeInfo(dayDate, pillars, settings) {
 
   if (dayClasses.length === 0) {
     return {
-      wakeMin: parseHHMM(settings.no_class_wake_time || "08:30"),
+      wakeMin: latestWakeMin,
       needsPostClassShower: false,
       firstClass: null,
       dayClasses
@@ -1148,9 +1245,9 @@ function computeDynamicWakeInfo(dayDate, pillars, settings) {
     };
   }
 
-  // First class >= 08:00 (or > 07:45): wake 60 minutes before first class start_time
+  // First class > 07:45: wake 60m before class start, capped at latestWakeMin (e.g., 4:30 PM class still wakes at 8:30 AM)
   return {
-    wakeMin: Math.max(0, firstStartMin - 60),
+    wakeMin: Math.min(latestWakeMin, Math.max(0, firstStartMin - 60)),
     needsPostClassShower: false,
     firstClass,
     dayClasses
@@ -1370,6 +1467,7 @@ function findRunSlot(effectiveStart, preferredStudyEndMin, busyIntervals) {
 function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = state.pillars, settings = getSettings() } = {}) {
   const todayDate = addLocalDays(now, 0);
   const todayKey = toLocalDateKey(todayDate);
+  const nowRoundedUpMin = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
 
   // Use reflow anchor if active for today
   const todayReflowMin =
@@ -1379,14 +1477,26 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
 
   const runDayOffsets = selectRunDaysForWeek(todayDate, pillars, tasks, settings);
 
+  // Separate fixed-time personal plans (hard immovable pillars) from auto-slotted study tasks
+  const activeTasks = tasks.filter((t) => t.status === "active");
+  const fixedPersonalPlans = activeTasks.filter((t) => isFixedPersonalPlan(t));
+  const autoSlotTasks = activeTasks.filter((t) => !isFixedPersonalPlan(t));
+
   // Build ordered active task pool for slotting across Days 0..6
-  const orderedActive = buildOrderedQueue(tasks, now, { alternate: true });
-  const taskPool = orderedActive.map((t) => ({
-    task: t,
-    dueKey: getBucketKey(t, now) === "0000-OVERDUE" ? todayKey : toLocalDateKey(new Date(t.due_at)),
-    remaining: Math.max(5, Math.round(t.duration_minutes || 30)),
-    partCount: 0
-  }));
+  const orderedActive = buildOrderedQueue(autoSlotTasks, now, { alternate: true });
+  const taskPool = orderedActive.map((t) => {
+    const dueDate = new Date(t.due_at);
+    const exactDueKey = toLocalDateKey(dueDate);
+    const isDefaultEndOfDay = dueDate.getHours() === 23 && dueDate.getMinutes() === 59;
+    return {
+      task: t,
+      dueKey: getBucketKey(t, now) === "0000-OVERDUE" ? todayKey : exactDueKey,
+      exactDueKey,
+      dueMin: isDefaultEndOfDay ? null : dueDate.getHours() * 60 + dueDate.getMinutes(),
+      remaining: Math.max(5, Math.round(t.duration_minutes || 30)),
+      partCount: 0
+    };
+  });
 
   const days = {};
 
@@ -1412,9 +1522,12 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
         ? Math.max(wakeInfo.wakeMin, todayReflowMin)
         : wakeInfo.wakeMin;
 
+    // Never schedule uncompleted study tasks in the past on Today
+    const studyStartMin = offset === 0 ? Math.max(effectiveStart, nowRoundedUpMin) : effectiveStart;
+
     const blocks = [];
-    const busyForFixed = []; // [start, end] occupied by classes/showers/meals/runs
-    const busyForStudy = []; // includes 15m breathing gap after classes & runs
+    const busyForFixed = []; // [start, end] occupied by classes/fixed personal/showers/meals/runs
+    const busyForStudy = []; // includes breathing gaps after classes, fixed personal plans, & runs
 
     // 1. Classes + Walk Buffers (excluded from planned_events, marked In iPhone Cal)
     for (const pillar of wakeInfo.dayClasses) {
@@ -1454,6 +1567,39 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
       });
       busyForFixed.push([firstEnd, showerEnd]);
       busyForStudy.push([firstEnd, showerEnd + 10]);
+    }
+
+    // 2B. Hard, Immovable Fixed-Time Personal Plans (scheduled BEFORE meals, runs, and study tasks)
+    const dayFixedPlans = fixedPersonalPlans
+      .filter((t) => toLocalDateKey(new Date(t.due_at)) === dateKey)
+      .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime());
+
+    for (const planTask of dayFixedPlans) {
+      const dueDate = new Date(planTask.due_at);
+      const startMin = dueDate.getHours() * 60 + dueDate.getMinutes();
+      const dur = Math.max(5, Math.round(planTask.duration_minutes || 30));
+      const endMin = startMin + dur;
+
+      blocks.push({
+        eventType: "personal",
+        taskId: planTask.id,
+        task: planTask,
+        isPersonal: true,
+        isFixedTime: true,
+        isStarred: Boolean(planTask.is_starred),
+        title: planTask.title,
+        icsTitle: planTask.title,
+        location: "",
+        notes: `Pinned personal plan (${formatDuration(dur)})`,
+        startMin,
+        endMin,
+        durationMin: dur,
+        meta: `${formatDuration(dur)} · Personal plan`,
+        badge: "Pinned"
+      });
+
+      busyForFixed.push([startMin, endMin]);
+      busyForStudy.push([startMin, endMin + 10]);
     }
 
     // 3. Meals (2 or 3 meals intersected with live Purdue Dining hours)
@@ -1547,8 +1693,8 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
             const avail = gapEnd - cursor;
             if (avail < 15) break;
 
-            // Pick next eligible task in priority order
-            const candidate = taskPool.find((item) => {
+            // Gather eligible tasks and prefer earlier specific-due-time tasks due on this day before 23:59 tasks
+            const eligible = taskPool.filter((item) => {
               if (item.remaining <= 0) return false;
               if (!itemFilter(item)) return false;
               if (item.task.all_at_once && item.remaining > avail) return false;
@@ -1556,7 +1702,15 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
               return true;
             });
 
-            if (!candidate) break;
+            if (eligible.length === 0) break;
+
+            let candidate = eligible[0];
+            const specificDueToday = eligible
+              .filter((item) => item.exactDueKey === dateKey && item.dueMin !== null)
+              .sort((a, b) => a.dueMin - b.dueMin);
+            if (specificDueToday.length > 0 && !isTaskOverdue(candidate.task, now)) {
+              candidate = specificDueToday[0];
+            }
 
             const chunk = candidate.task.all_at_once
               ? candidate.remaining
@@ -1569,6 +1723,10 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
 
             const isSplit = candidate.remaining > 0 || candidate.partCount > 1;
             const isPersonal = candidate.task.course.toLowerCase() === "personal";
+            const afterDueTime =
+              candidate.exactDueKey === dateKey &&
+              candidate.dueMin !== null &&
+              blockEnd > candidate.dueMin;
 
             blocks.push({
               eventType: "study",
@@ -1576,6 +1734,7 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
               task: candidate.task,
               isPersonal,
               isStarred: Boolean(candidate.task.is_starred),
+              afterDueTime,
               title: isSplit ? `${candidate.task.title} (Part ${candidate.partCount})` : candidate.task.title,
               icsTitle: `${candidate.task.course}: ${candidate.task.title}`,
               location: candidate.task.course,
@@ -1595,18 +1754,18 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
         return lastPlacedEnd;
       };
 
-      // Pass 1A: Slot tasks due on or before this day inside preferred 8h sleep window
-      slotItemsIntoRange(effectiveStart, preferredStudyEndMin, (item) => item.dueKey <= dateKey);
+      // Pass 1A: Slot tasks due on or before this day inside preferred 8h sleep window (starting from studyStartMin)
+      slotItemsIntoRange(studyStartMin, preferredStudyEndMin, (item) => item.dueKey <= dateKey);
 
       // Pass 1B: Gently pull forward upcoming tasks into spare healthy capacity before 8h sleep cutoff
-      slotItemsIntoRange(effectiveStart, preferredStudyEndMin, (item) => item.dueKey > dateKey);
+      slotItemsIntoRange(studyStartMin, preferredStudyEndMin, (item) => item.dueKey > dateKey);
 
       // Check if any tasks due on/before this day STILL remain unscheduled
       const urgentRemaining = () => taskPool.filter((item) => item.remaining > 0 && item.dueKey <= dateKey);
 
       if (urgentRemaining().length > 0 && hardStudyEndMin > preferredStudyEndMin) {
         // Pass 2: Flex sleep buffer between 8h preferred and 7h floor for urgent tasks due today
-        const flexStart = Math.max(effectiveStart, preferredStudyEndMin);
+        const flexStart = Math.max(studyStartMin, preferredStudyEndMin);
         const flexLastEnd = slotItemsIntoRange(flexStart, hardStudyEndMin, (item) => item.dueKey <= dateKey);
 
         const stillRemaining = urgentRemaining();
@@ -1654,22 +1813,9 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
       });
     }
 
-    // 7. Sleep Anchor (Deep Twilight Indigo)
+    // 7. Compute Sleep Anchor stats (rendered as clean Bedtime marker line, not a big box)
     const actualSleepMin = Math.max(0, tomorrowWakeTimelineMin - actualBedMin);
     const actualSleepHours = actualSleepMin / 60;
-    blocks.push({
-      eventType: "sleep",
-      title: `Sleep Anchor · ${formatSleepHoursLabel(actualSleepHours)}`,
-      icsTitle: `Sleep (${formatSleepHoursLabel(actualSleepHours)})`,
-      location: "",
-      notes: `Wake at ${formatMinuteOfDay(tomorrowWakeInfo.wakeMin)} tomorrow (${formatHoursAndMins(actualSleepMin)} sleep).`,
-      startMin: actualBedMin,
-      endMin: tomorrowWakeTimelineMin,
-      sleepHours: actualSleepHours,
-      sleepMinutes: actualSleepMin,
-      meta: `Wake at ${formatMinuteOfDay(tomorrowWakeInfo.wakeMin)} tomorrow`,
-      badge: sleepStatus === "overload" ? "7h Floor Protected" : sleepStatus === "flexed" ? "Flexed" : "Protected"
-    });
 
     blocks.sort((a, b) => a.startMin - b.startMin);
 
@@ -1751,8 +1897,8 @@ function computeFreeMinutesBetween(startDate, endDate, pillars) {
 }
 
 function computeLaterTodayPlan(task, now = new Date()) {
-  const activeTasks = state.tasks.filter((t) => t.status === "active");
-  const gap = getActiveGapContext(state.pillars, now);
+  const activeTasks = state.tasks.filter((t) => t.status === "active" && !isFixedPersonalPlan(t));
+  const gap = getActiveGapContext(state.pillars, now, state.tasks);
   const bucketKey = getBucketKey(task, now);
   const bucketRaw = activeTasks.filter((t) => getBucketKey(t, now) === bucketKey);
   const bucket = sortBucketTasks(bucketRaw, { alternate: !gap.isGap });
@@ -2037,6 +2183,7 @@ async function createTask(payload) {
     duration_minutes: payload.duration_minutes,
     all_at_once: payload.all_at_once,
     is_starred: payload.is_starred,
+    is_fixed_time: Boolean(payload.is_fixed_time),
     status: "active",
     sort_order: 0,
     created_at: new Date().toISOString()
@@ -2061,7 +2208,8 @@ async function updateTask(taskId, payload) {
     due_at: payload.due_at,
     duration_minutes: payload.duration_minutes,
     all_at_once: payload.all_at_once,
-    is_starred: payload.is_starred
+    is_starred: payload.is_starred,
+    is_fixed_time: Boolean(payload.is_fixed_time)
   };
 
   state.tasks[idx] = after;
@@ -2077,7 +2225,8 @@ async function updateTask(taskId, payload) {
         due_at: after.due_at,
         duration_minutes: after.duration_minutes,
         all_at_once: after.all_at_once,
-        is_starred: after.is_starred
+        is_starred: after.is_starred,
+        is_fixed_time: after.is_fixed_time
       })
       .eq("id", taskId)
   );
@@ -2145,7 +2294,10 @@ function renderMain({ animateEnter = false } = {}) {
 
   if (focus.gap.isGap) {
     dom.contextPill.classList.add("is-gap");
-    dom.contextPillText.textContent = `${focus.gap.availableMinutes}m free before ${focus.gap.pillar.name} walk-out`;
+    dom.contextPillText.textContent =
+      focus.gap.kind === "personal"
+        ? `${focus.gap.availableMinutes}m free before ${focus.gap.pillar.name}`
+        : `${focus.gap.availableMinutes}m free before ${focus.gap.pillar.name} walk-out`;
   } else {
     dom.contextPill.classList.remove("is-gap");
     dom.contextPillText.textContent = "Open Study Block";
@@ -2354,19 +2506,22 @@ function renderDayPlan() {
     if (block.eventType === "meal") typeClass = "plan-card-meal";
     else if (block.eventType === "run") typeClass = "plan-card-run";
     else if (block.eventType === "shower") typeClass = "plan-card-shower";
-    else if (block.eventType === "sleep") typeClass = "plan-card-sleep";
+    else if (block.eventType === "personal") typeClass = "plan-card-personal";
     else if (block.eventType === "study") {
       typeClass = block.isPersonal ? "plan-card-personal" : "plan-card-academic";
     }
 
     card.className = `plan-card ${typeClass} ${block.isStarred ? "is-starred-plan" : ""} ${isPast ? "is-past" : ""}`;
 
-    const rightControlHtml =
-      block.eventType === "run"
-        ? `<button type="button" class="plan-move-run-btn" data-move-run-offset="${block.dayOffset}">Move Run</button>`
-        : block.badge
-          ? `<span class="plan-tag">${escapeHtml(block.badge)}</span>`
-          : "";
+    let rightControlHtml = "";
+    if (block.eventType === "run") {
+      rightControlHtml = `<button type="button" class="plan-move-run-btn" data-move-run-offset="${block.dayOffset}">Move Run</button>`;
+    } else if (block.badge || block.afterDueTime) {
+      rightControlHtml = `<div class="plan-card-tags">
+        ${block.afterDueTime ? '<span class="plan-tag plan-tag-late">After due time</span>' : ""}
+        ${block.badge ? `<span class="plan-tag">${escapeHtml(block.badge)}</span>` : ""}
+      </div>`;
+    }
 
     card.innerHTML = `
       <div class="plan-card-header">
@@ -2379,7 +2534,7 @@ function renderDayPlan() {
       </div>
     `;
 
-    if (block.eventType === "study" && block.task) {
+    if ((block.eventType === "study" || block.eventType === "personal") && block.task) {
       card.addEventListener("click", () => {
         openTaskModal(block.task);
       });
@@ -2395,6 +2550,22 @@ function renderDayPlan() {
     frag.appendChild(card);
     prevBlock = block;
   }
+
+  // Clean horizontal Bedtime Marker Line (replaces big dark indigo Sleep box)
+  const bedtimeMarker = document.createElement("div");
+  bedtimeMarker.className = "plan-bedtime-marker";
+  const bedtimeStatusPill =
+    dayPlan.sleepStatus === "flexed"
+      ? '<span class="plan-bedtime-pill is-flexed">Flexed</span>'
+      : dayPlan.sleepStatus === "overload"
+        ? '<span class="plan-bedtime-pill is-floor">7h Floor</span>'
+        : "";
+  bedtimeMarker.innerHTML = `
+    <span>Bedtime · ${formatMinuteOfDay(dayPlan.actualBedMin)} (${formatSleepHoursLabel(dayPlan.actualSleepHours)} sleep)</span>
+    ${bedtimeStatusPill}
+    <span class="plan-wake-line"></span>
+  `;
+  frag.appendChild(bedtimeMarker);
 
   // Render Overflow Tasks card section if tasks exceed 7h sleep cutoff
   if (dayPlan.overflowTasks && dayPlan.overflowTasks.length > 0) {
@@ -2563,8 +2734,9 @@ function renderCarousel(preserveScrollIndex = null) {
 
   const frag = document.createDocumentFragment();
   queue.forEach((task, index) => {
-    const overdue = isTaskOverdue(task, now);
-    const dueText = formatDueLabel(task.due_at, now);
+    const isFixed = isFixedPersonalPlan(task);
+    const overdue = !isFixed && isTaskOverdue(task, now);
+    const dueText = isFixed ? formatDueLabel(task.due_at, now).replace(/^Due /, "Pinned ") : formatDueLabel(task.due_at, now);
     const isPersonal = task.course.toLowerCase() === "personal";
     const isSlice = index === 0 && focus.sliceMinutes && focus.focusTask?.id === task.id;
 
@@ -2587,14 +2759,15 @@ function renderCarousel(preserveScrollIndex = null) {
       <div class="card-badges-row">
         <span class="due-label ${overdue ? "is-overdue-text" : ""}">${escapeHtml(dueText)}</span>
         ${overdue ? '<span class="badge badge-overdue">Overdue</span>' : ""}
-        ${task.all_at_once ? '<span class="badge badge-all-at-once">All-at-once</span>' : ""}
+        ${isFixed ? '<span class="badge badge-pinned">Pinned</span>' : ""}
+        ${!isFixed && task.all_at_once ? '<span class="badge badge-all-at-once">All-at-once</span>' : ""}
         ${isSlice ? `<span class="badge badge-slice">Start first ${focus.sliceMinutes}m</span>` : ""}
       </div>
 
       <div class="carousel-card-title">${escapeHtml(task.title)}</div>
 
       <div class="carousel-card-footer">
-        <span>#${index + 1} in queue</span>
+        <span>${isFixed ? "Fixed Plan" : `#${index + 1} in queue`}</span>
         <span class="tap-edit-label">Edit</span>
       </div>
     `;
@@ -2702,6 +2875,28 @@ function resetDeleteButton() {
   dom.btnDeleteTask.classList.add("btn-danger-outline");
 }
 
+function syncTaskModalFixedPlanUI() {
+  const isPersonal = String(modalCourse || "").toLowerCase() === "personal";
+  if (!isPersonal) {
+    dom.taskFixedTimeToggle.checked = false;
+    dom.taskFixedPlanCard.hidden = true;
+    dom.taskFixedStartWrap.hidden = true;
+    dom.taskSpecificTimeRow.hidden = false;
+    dom.taskAllAtOnceCard.hidden = false;
+    return;
+  }
+
+  dom.taskFixedPlanCard.hidden = false;
+  const isPinned = dom.taskFixedTimeToggle.checked;
+  dom.taskFixedStartWrap.hidden = !isPinned;
+  dom.taskSpecificTimeRow.hidden = isPinned;
+  dom.taskAllAtOnceCard.hidden = isPinned;
+
+  if (isPinned && !dom.taskFixedStartTime.value) {
+    dom.taskFixedStartTime.value = getNextRoundedHalfHourHHMM(new Date());
+  }
+}
+
 function openTaskModal(taskToEdit = null) {
   const now = new Date();
   const todayKey = toLocalDateKey(now);
@@ -2712,7 +2907,7 @@ function openTaskModal(taskToEdit = null) {
 
   if (taskToEdit) {
     state.editingTaskId = taskToEdit.id;
-    dom.taskModalTitle.textContent = "Edit Task";
+    dom.taskModalTitle.textContent = isFixedPersonalPlan(taskToEdit) ? "Edit Personal Plan" : "Edit Task";
     dom.btnTaskSave.textContent = "Save Changes";
     dom.btnDeleteTask.hidden = false;
 
@@ -2735,10 +2930,15 @@ function openTaskModal(taskToEdit = null) {
     }
     setActivePill(dom.taskDuePills, "data-due-preset", modalDuePreset);
 
+    const hhmm = `${pad2(dueDate.getHours())}:${pad2(dueDate.getMinutes())}`;
+    const isFixed = isFixedPersonalPlan(taskToEdit);
+    dom.taskFixedTimeToggle.checked = isFixed;
+    dom.taskFixedStartTime.value = isFixed ? hhmm : getNextRoundedHalfHourHHMM(now);
+
     const isDefaultEndOfDay = dueDate.getHours() === 23 && dueDate.getMinutes() === 59;
-    dom.taskSpecificTimeToggle.checked = !isDefaultEndOfDay;
-    dom.taskTimeInput.hidden = isDefaultEndOfDay;
-    dom.taskTimeInput.value = `${pad2(dueDate.getHours())}:${pad2(dueDate.getMinutes())}`;
+    dom.taskSpecificTimeToggle.checked = !isFixed && !isDefaultEndOfDay;
+    dom.taskTimeInput.hidden = isFixed || isDefaultEndOfDay;
+    dom.taskTimeInput.value = isFixed ? "23:59" : hhmm;
 
     modalDuration = taskToEdit.duration_minutes;
     const isPresetDuration = [15, 30, 60, 120].includes(modalDuration);
@@ -2762,6 +2962,9 @@ function openTaskModal(taskToEdit = null) {
     dom.taskDatePickerWrap.hidden = true;
     dom.taskDateInput.value = todayKey;
 
+    dom.taskFixedTimeToggle.checked = false;
+    dom.taskFixedStartTime.value = getNextRoundedHalfHourHHMM(now);
+
     dom.taskSpecificTimeToggle.checked = false;
     dom.taskTimeInput.hidden = true;
     dom.taskTimeInput.value = "23:59";
@@ -2774,6 +2977,7 @@ function openTaskModal(taskToEdit = null) {
     dom.taskIsStarred.checked = false;
   }
 
+  syncTaskModalFixedPlanUI();
   dom.taskModal.hidden = false;
   requestAnimationFrame(() => {
     dom.taskTitleInput.focus();
@@ -2998,6 +3202,7 @@ async function initAuthAndSync() {
       state.tasks = [];
       state.pillars = [];
       state.userSettings = null;
+      state.lastPlannedEventsSig = null;
       state.undoStack = [];
       state.redoStack = [];
       clearAllCache();
@@ -3245,6 +3450,7 @@ function bindEvents() {
       state.tasks = [];
       state.pillars = [];
       state.userSettings = null;
+      state.lastPlannedEventsSig = null;
       state.undoStack = [];
       state.redoStack = [];
       clearAllCache();
@@ -3369,6 +3575,14 @@ function bindEvents() {
     if (!btn) return;
     modalCourse = btn.dataset.course;
     setActivePill(dom.taskCoursePills, "data-course", modalCourse);
+    syncTaskModalFixedPlanUI();
+  });
+
+  dom.taskFixedTimeToggle.addEventListener("change", () => {
+    if (dom.taskFixedTimeToggle.checked && !dom.taskFixedStartTime.value) {
+      dom.taskFixedStartTime.value = getNextRoundedHalfHourHHMM(new Date());
+    }
+    syncTaskModalFixedPlanUI();
   });
 
   dom.taskDuePills.addEventListener("click", (e) => {
@@ -3455,13 +3669,23 @@ function bindEvents() {
       return;
     }
 
+    const isFixedTime = String(modalCourse || "").toLowerCase() === "personal" && dom.taskFixedTimeToggle.checked;
+    if (isFixedTime && !dom.taskFixedStartTime.value) {
+      dom.taskFormError.textContent = "Please choose a start time for your fixed plan.";
+      dom.taskFormError.hidden = false;
+      return;
+    }
+
     const payload = {
       title,
       course: modalCourse,
-      due_at: buildDueIsoFromInputs(dateKey, dom.taskSpecificTimeToggle.checked, dom.taskTimeInput.value),
+      due_at: isFixedTime
+        ? buildDueIsoFromInputs(dateKey, true, dom.taskFixedStartTime.value)
+        : buildDueIsoFromInputs(dateKey, dom.taskSpecificTimeToggle.checked, dom.taskTimeInput.value),
       duration_minutes: Math.min(720, Math.max(1, Math.round(durationMinutes))),
-      all_at_once: dom.taskAllAtOnce.checked,
-      is_starred: dom.taskIsStarred.checked
+      all_at_once: isFixedTime ? false : dom.taskAllAtOnce.checked,
+      is_starred: dom.taskIsStarred.checked,
+      is_fixed_time: isFixedTime
     };
 
     const editingId = state.editingTaskId;

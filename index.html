@@ -36,7 +36,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="./styles.css?v=5" />
+  <link rel="stylesheet" href="./styles.css?v=6" />
 </head>
 <body>
   <!-- =======================================================================
@@ -465,7 +465,7 @@
               <input id="set-evening-shower" type="number" min="10" max="90" step="5" value="40" required />
             </div>
             <div class="field-group">
-              <label for="set-noclass-wake">No-Class Wake</label>
+              <label for="set-noclass-wake">Latest / No-Class Wake</label>
               <input id="set-noclass-wake" type="time" value="08:30" required />
             </div>
           </div>
@@ -591,7 +591,7 @@
             </button>
           </div>
           <p class="settings-help-note">
-            <strong>How to subscribe:</strong> iPhone Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, then paste this link.
+            <strong>How to subscribe:</strong> Open Apple Calendar → Calendars → Add Calendar → Add Subscription Calendar, then paste this link. (If you use Week Calendar, toggle FocusDeck Plan on in Week Calendar's Calendars menu.)
           </p>
           <p class="settings-help-note is-muted">
             Classes are intentionally excluded from this feed so they never duplicate your existing Apple Calendar schedule.
@@ -669,7 +669,22 @@
             <input id="task-date-input" type="date" aria-label="Pick due date" />
           </div>
 
-          <div class="inline-toggle-row">
+          <div id="task-fixed-plan-card" class="fixed-plan-card">
+            <label class="switch-label fixed-plan-switch" for="task-fixed-time-toggle">
+              <input id="task-fixed-time-toggle" type="checkbox" />
+              <span class="switch-track" aria-hidden="true"></span>
+              <span class="fixed-plan-copy">
+                <strong>Pin to a specific time (Fixed Plan)</strong>
+                <small>Locks this time on Day Plan &amp; Calendar so other tasks flow around it</small>
+              </span>
+            </label>
+            <div id="task-fixed-start-wrap" class="fixed-start-row" hidden>
+              <label for="task-fixed-start-time">Start Time</label>
+              <input id="task-fixed-start-time" type="time" value="14:00" class="compact-time-input" aria-label="Fixed plan start time" />
+            </div>
+          </div>
+
+          <div id="task-specific-time-row" class="inline-toggle-row">
             <label class="switch-label" for="task-specific-time-toggle">
               <input id="task-specific-time-toggle" type="checkbox" />
               <span class="switch-track" aria-hidden="true"></span>
@@ -705,7 +720,7 @@
         </div>
 
         <div class="options-stack">
-          <label class="check-card" for="task-all-at-once">
+          <label id="task-all-at-once-card" class="check-card" for="task-all-at-once">
             <input id="task-all-at-once" type="checkbox" />
             <span class="check-copy">
               <strong>All-at-once</strong>
@@ -795,6 +810,6 @@
   <!-- Subtle Toast Notification -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script type="module" src="./app.js?v=5"></script>
+  <script type="module" src="./app.js?v=6"></script>
 </body>
 </html>

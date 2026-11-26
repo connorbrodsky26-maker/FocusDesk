@@ -1194,7 +1194,9 @@ html[data-boot="app"] #auth-view {
   gap: 10px;
 }
 
-.plan-wake-marker {
+.plan-wake-marker,
+.plan-bedtime-marker {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1204,10 +1206,51 @@ html[data-boot="app"] #auth-view {
   color: var(--text-secondary);
 }
 
+.plan-bedtime-marker {
+  padding: 8px 4px 6px;
+  color: var(--sleep-bg);
+}
+
 .plan-wake-line {
   flex: 1;
   height: 1px;
   background: var(--border-subtle);
+}
+
+.plan-bedtime-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.69rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.plan-bedtime-pill.is-flexed {
+  background: #FDF3E3;
+  border: 1px solid #EBD0A4;
+  color: #8C5613;
+}
+
+.plan-bedtime-pill.is-floor {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+}
+
+.plan-card-tags {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.plan-tag-late {
+  background: var(--danger-soft) !important;
+  color: var(--danger) !important;
+  border: 1px solid var(--danger-border);
 }
 
 .plan-card {
@@ -2070,6 +2113,75 @@ html[data-boot="app"] #auth-view {
 
 .conditional-input {
   margin-top: 2px;
+}
+
+.fixed-plan-card {
+  margin-top: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.fixed-plan-card:has(input:checked) {
+  border-color: var(--sage-border);
+  background: var(--personal-bg);
+}
+
+.fixed-plan-switch {
+  align-items: flex-start !important;
+  color: var(--text-primary) !important;
+}
+
+.fixed-plan-switch .switch-track {
+  margin-top: 2px;
+}
+
+.fixed-plan-switch input:checked + .switch-track {
+  background: var(--personal-accent);
+}
+
+.fixed-plan-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fixed-plan-copy strong {
+  font-size: 0.87rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.fixed-plan-copy small {
+  font-size: 0.77rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.fixed-start-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(79, 122, 101, 0.16);
+}
+
+.fixed-start-row label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--personal-accent);
+}
+
+.badge-pinned {
+  background: rgba(79, 122, 101, 0.14);
+  color: var(--personal-accent);
 }
 
 .inline-toggle-row {
