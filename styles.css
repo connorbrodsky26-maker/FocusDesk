@@ -2119,6 +2119,24 @@ html[data-boot="app"] #auth-view {
   min-width: 320px;
 }
 
+.week-schedule-grid-7 {
+  grid-template-columns: repeat(7, minmax(64px, 1fr));
+  min-width: 484px;
+}
+
+.week-meal-cell {
+  background: var(--meal-bg);
+  border-color: var(--meal-border);
+}
+
+.week-meal-cell .week-class-name {
+  color: var(--meal-accent);
+}
+
+.week-meal-cell .week-class-time {
+  color: #825329;
+}
+
 .week-day-col {
   display: flex;
   flex-direction: column;

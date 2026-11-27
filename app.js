@@ -28,6 +28,7 @@ const STORAGE_KEYS = {
   PILLARS: "focusdeck_pillars_v1",
   USER_SETTINGS: "focusdeck_user_settings_v2",
   CANCELLED_CLASSES: "focusdeck_cancelled_classes_v1",
+  DISABLED_MEALS: "focusdeck_disabled_meals_v1",
   DINING_PREFIX: "focusdeck_dining_v2_",
   USER_EMAIL: "focusdeck_user_email",
   USER_ID: "focusdeck_user_id"
@@ -77,6 +78,7 @@ const state = {
   deleteConfirmArmed: false,
   editingPillarId: null,
   cancelClassesWeekOffset: 0,
+  disableMealsWeekOffset: 0,
   pendingLatePlan: null,
   carouselRafId: null,
   carouselCenteredIndex: 0
@@ -188,6 +190,10 @@ const dom = {
   btnCancelWeekLabel: document.getElementById("btn-cancel-week-label"),
   btnCancelWeekNext: document.getElementById("btn-cancel-week-next"),
   cancelClassesGrid: document.getElementById("cancel-classes-grid"),
+  btnMealsWeekPrev: document.getElementById("btn-meals-week-prev"),
+  btnMealsWeekLabel: document.getElementById("btn-meals-week-label"),
+  btnMealsWeekNext: document.getElementById("btn-meals-week-next"),
+  disableMealsGrid: document.getElementById("disable-meals-grid"),
   settingsUserEmail: document.getElementById("settings-user-email"),
   btnSyncNow: document.getElementById("btn-sync-now"),
   btnSignOut: document.getElementById("btn-sign-out"),
@@ -455,13 +461,14 @@ function createDefaultUserSettings(userId = null) {
     no_class_wake_time: "08:30",
     runs_per_week: 2,
     preferred_run_days: [3, 6],
-    cancelled_classes: []
+    cancelled_classes: [],
+    disabled_meals: []
   };
 }
 
-function loadLocalCancelledClasses() {
+function loadLocalStringArray(storageKey) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.CANCELLED_CLASSES);
+    const raw = localStorage.getItem(storageKey);
     const arr = raw ? JSON.parse(raw) : [];
     return Array.isArray(arr) ? arr : [];
   } catch (_) {
@@ -469,7 +476,7 @@ function loadLocalCancelledClasses() {
   }
 }
 
-function pruneCancelledClasses(list) {
+function pruneDateKeyedList(list) {
   if (!Array.isArray(list)) return [];
   const cutoffKey = toLocalDateKey(addLocalDays(new Date(), -30));
   const seen = new Set();
@@ -496,7 +503,13 @@ function normalizeUserSettings(row, userId = null) {
     ? src.cancelled_classes
     : Array.isArray(state.userSettings?.cancelled_classes)
       ? state.userSettings.cancelled_classes
-      : loadLocalCancelledClasses();
+      : loadLocalStringArray(STORAGE_KEYS.CANCELLED_CLASSES);
+
+  const disabledMealsSource = Array.isArray(src.disabled_meals)
+    ? src.disabled_meals
+    : Array.isArray(state.userSettings?.disabled_meals)
+      ? state.userSettings.disabled_meals
+      : loadLocalStringArray(STORAGE_KEYS.DISABLED_MEALS);
 
   return {
     user_id: src.user_id || userId || defaults.user_id,
@@ -523,7 +536,8 @@ function normalizeUserSettings(row, userId = null) {
     preferred_run_days: Array.isArray(src.preferred_run_days)
       ? [...new Set(src.preferred_run_days.map(Number).filter((d) => d >= 0 && d <= 6))].sort((a, b) => a - b)
       : defaults.preferred_run_days,
-    cancelled_classes: pruneCancelledClasses(cancelledSource)
+    cancelled_classes: pruneDateKeyedList(cancelledSource),
+    disabled_meals: pruneDateKeyedList(disabledMealsSource)
   };
 }
 
@@ -627,6 +641,7 @@ function saveUserSettingsToCache() {
     const s = getSettings();
     localStorage.setItem(STORAGE_KEYS.USER_SETTINGS, JSON.stringify(s));
     localStorage.setItem(STORAGE_KEYS.CANCELLED_CLASSES, JSON.stringify(s.cancelled_classes || []));
+    localStorage.setItem(STORAGE_KEYS.DISABLED_MEALS, JSON.stringify(s.disabled_meals || []));
   } catch (_) {}
 }
 
@@ -655,6 +670,7 @@ function clearAllCache() {
     localStorage.removeItem(STORAGE_KEYS.PILLARS);
     localStorage.removeItem(STORAGE_KEYS.USER_SETTINGS);
     localStorage.removeItem(STORAGE_KEYS.CANCELLED_CLASSES);
+    localStorage.removeItem(STORAGE_KEYS.DISABLED_MEALS);
     localStorage.removeItem(STORAGE_KEYS.USER_EMAIL);
     localStorage.removeItem(STORAGE_KEYS.USER_ID);
   } catch (_) {}
@@ -899,9 +915,10 @@ async function saveUserSettings(patch, { silentToast = false } = {}) {
   if (state.user) {
     await runSupabaseWrite(async () => {
       const res = await supabase.from("user_settings").upsert(next, { onConflict: "user_id" });
-      if (res.error && String(res.error.message || "").toLowerCase().includes("cancelled_classes")) {
-        // Fallback gracefully if cancelled_classes column has not been added to Supabase yet
-        const { cancelled_classes: _ignored, ...baseSettings } = next;
+      const msg = String(res.error?.message || "").toLowerCase();
+      if (res.error && (msg.includes("cancelled_classes") || msg.includes("disabled_meals"))) {
+        // Fallback gracefully if optional columns have not been added to Supabase yet
+        const { cancelled_classes: _c, disabled_meals: _d, ...baseSettings } = next;
         return await supabase.from("user_settings").upsert(baseSettings, { onConflict: "user_id" });
       }
       return res;
@@ -921,17 +938,18 @@ function schedulePlannedEventsSync() {
   }, 1100);
 }
 
-function buildPlannedEventsRows(plan, userId) {
+function buildPlannedEventsRows(plan, userId, { pillars = state.pillars, settings = getSettings() } = {}) {
   const rows = [];
   if (!plan || !userId) return rows;
 
   const allowedTypes = new Set(["personal", "meal", "run", "study", "shower"]);
 
+  // 1. Everything except classes: 1 week ahead (offsets 0..6)
   for (let offset = 0; offset <= 6; offset++) {
     const dayPlan = plan.days[offset];
     if (!dayPlan) continue;
 
-    // 1. Point-in-time Wake Up milestone (start_at === end_at)
+    // Point-in-time Wake Up milestone (start_at === end_at)
     const wakeIso = dateFromDayAndMinute(dayPlan.date, dayPlan.wakeMin).toISOString();
     rows.push({
       user_id: userId,
@@ -943,7 +961,7 @@ function buildPlannedEventsRows(plan, userId) {
       end_at: wakeIso
     });
 
-    // 2. Scheduled non-class blocks: personal (including Personal study tasks for green color), meal, run, study, shower
+    // Scheduled blocks: personal (including Personal study tasks for green color), meal, run, study, shower
     for (const block of dayPlan.blocks) {
       if (!allowedTypes.has(block.eventType)) continue;
       const exportedType = block.eventType === "study" && block.isPersonal ? "personal" : block.eventType;
@@ -959,7 +977,7 @@ function buildPlannedEventsRows(plan, userId) {
       });
     }
 
-    // 3. Point-in-time Bedtime milestone (start_at === end_at, event_type: "sleep" keeps 15m pre-bed alert)
+    // Point-in-time Bedtime milestone (start_at === end_at, event_type: "sleep" keeps 15m pre-bed alert)
     const bedIso = dateFromDayAndMinute(dayPlan.date, dayPlan.actualBedMin).toISOString();
     rows.push({
       user_id: userId,
@@ -970,6 +988,28 @@ function buildPlannedEventsRows(plan, userId) {
       start_at: bedIso,
       end_at: bedIso
     });
+  }
+
+  // 2. Classes: 3 weeks ahead (offsets 0..20), respecting all per-date cancelled_classes!
+  const todayBase = plan.days[0]?.date ? new Date(plan.days[0].date) : addLocalDays(new Date(), 0);
+  for (let offset = 0; offset <= 20; offset++) {
+    const dayDate = addLocalDays(todayBase, offset);
+    const activeClasses = getActiveClassesForDate(dayDate, pillars, settings);
+    for (const pillar of activeClasses) {
+      const classStart = parseHHMM(pillar.start_time);
+      const classEnd = parseHHMM(pillar.end_time);
+      const walkBuf = Number.isFinite(pillar.walk_buffer_minutes) ? pillar.walk_buffer_minutes : 15;
+      const walkOutStr = formatMinuteOfDay(Math.max(0, classStart - walkBuf));
+      rows.push({
+        user_id: userId,
+        event_type: "class",
+        title: pillar.name,
+        location: "",
+        notes: `${walkBuf}m walk buffer before class (${walkOutStr} walk-out)`,
+        start_at: dateFromDayAndMinute(dayDate, classStart).toISOString(),
+        end_at: dateFromDayAndMinute(dayDate, classEnd).toISOString()
+      });
+    }
   }
 
   return rows;
@@ -1664,7 +1704,7 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
         classStartMin: classStart,
         walkMin: walkBuf,
         meta: `${walkBuf}m walk (${formatMinuteOfDay(walkStart)}) + Class ${formatMinuteOfDay(classStart)}–${formatMinuteOfDay(classEnd)}`,
-        badge: "In iPhone Cal"
+        badge: "Class"
       });
 
       busyForFixed.push([walkStart, classEnd]);
@@ -1722,10 +1762,12 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
       busyForStudy.push([startMin, endMin + 10]);
     }
 
-    // 3. Meals (2 or 3 meals intersected with live Purdue Dining hours)
+    // 3. Meals (2 or 3 meals intersected with live Purdue Dining hours, skipping per-day disabled meals)
     const mealCount = settings.meals_per_day === 3 ? 3 : 2;
+    const disabledMealsSet = new Set(Array.isArray(settings.disabled_meals) ? settings.disabled_meals : []);
     let prevMealEatEnd = null;
     for (let m = 1; m <= mealCount; m++) {
+      if (disabledMealsSet.has(`${dateKey}|${m}`)) continue;
       const court = settings[`meal_${m}_court`] || (m === 1 ? "Wiley" : m === 2 ? "Ford" : "Earhart");
       const winStart = parseHHMM(settings[`meal_${m}_window_start`]);
       const winEnd = parseHHMM(settings[`meal_${m}_window_end`]);
@@ -2405,11 +2447,27 @@ function syncMealsStripUI() {
     btn.setAttribute("aria-pressed", String(active));
   });
 
-  const activeCourts =
-    s.meals_per_day === 3
-      ? [s.meal_1_court, s.meal_2_court, s.meal_3_court]
-      : [s.meal_1_court, s.meal_2_court];
-  dom.mealsSummaryText.textContent = activeCourts.join(" · ");
+  const todayKey = toLocalDateKey(new Date());
+  const disabledSet = new Set(Array.isArray(s.disabled_meals) ? s.disabled_meals : []);
+  const totalSlots = s.meals_per_day === 3 ? [1, 2, 3] : [1, 2];
+  const activeCourts = [];
+  let disabledTodayCount = 0;
+
+  for (const m of totalSlots) {
+    if (disabledSet.has(`${todayKey}|${m}`)) {
+      disabledTodayCount += 1;
+    } else {
+      activeCourts.push(s[`meal_${m}_court`]);
+    }
+  }
+
+  if (activeCourts.length === 0) {
+    dom.mealsSummaryText.textContent = "Meals off today";
+  } else if (disabledTodayCount > 0) {
+    dom.mealsSummaryText.textContent = `${activeCourts.join(" · ")} (${disabledTodayCount} off)`;
+  } else {
+    dom.mealsSummaryText.textContent = activeCourts.join(" · ");
+  }
 
   // Keep Today's Meals Bottom Sheet pills in sync
   dom.mealsSheetCountGroup.querySelectorAll("[data-meals-count]").forEach((btn) => {
@@ -2835,6 +2893,7 @@ function recomputePlanAndRender({ animateEnter = false, scheduleSync = false, ch
   if (!dom.settingsView.hidden) {
     renderPillarsList();
     renderCancelClassesGrid();
+    renderDisableMealsGrid();
   }
 
   if (scheduleSync) {
@@ -3371,10 +3430,96 @@ function renderCancelClassesGrid() {
   dom.cancelClassesGrid.appendChild(frag);
 }
 
+function renderDisableMealsGrid() {
+  if (!dom.disableMealsGrid) return;
+  const now = new Date();
+  const todayKey = toLocalDateKey(now);
+  const dow = now.getDay();
+  // Monday of the current week (Mon..Sun)
+  const daysBackToMon = (dow + 6) % 7;
+  const monday = addLocalDays(now, -daysBackToMon + state.disableMealsWeekOffset * 7);
+  const sunday = addLocalDays(monday, 6);
+
+  const rangeFmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const weekTag =
+    state.disableMealsWeekOffset === 0
+      ? " · This Week"
+      : state.disableMealsWeekOffset === 1
+        ? " · Next Week"
+        : state.disableMealsWeekOffset > 1
+          ? ` · +${state.disableMealsWeekOffset} wks`
+          : ` · ${state.disableMealsWeekOffset} wk`;
+  dom.btnMealsWeekLabel.textContent = `${rangeFmt(monday)} – ${rangeFmt(sunday)}${weekTag}`;
+  dom.btnMealsWeekPrev.disabled = state.disableMealsWeekOffset <= -1;
+  dom.btnMealsWeekNext.disabled = state.disableMealsWeekOffset >= 20;
+
+  const s = getSettings();
+  const mealCount = s.meals_per_day === 3 ? 3 : 2;
+  const disabledSet = new Set(s.disabled_meals || []);
+  const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  dom.disableMealsGrid.innerHTML = "";
+  const frag = document.createDocumentFragment();
+
+  for (let i = 0; i < 7; i++) {
+    const colDate = addLocalDays(monday, i);
+    const dateKey = toLocalDateKey(colDate);
+    const isToday = dateKey === todayKey;
+
+    const col = document.createElement("div");
+    col.className = `week-day-col ${isToday ? "is-today" : ""}`;
+    col.innerHTML = `
+      <div class="week-day-head">
+        <span class="week-day-name">${weekdayNames[i]}</span>
+        <span class="week-day-num">${colDate.getDate()}</span>
+      </div>
+    `;
+
+    for (let m = 1; m <= mealCount; m++) {
+      const mealKey = `${dateKey}|${m}`;
+      const isDisabled = disabledSet.has(mealKey);
+      const court = s[`meal_${m}_court`] || (m === 1 ? "Wiley" : m === 2 ? "Ford" : "Earhart");
+
+      const cell = document.createElement("div");
+      cell.className = `week-class-cell week-meal-cell ${isDisabled ? "is-cancelled" : ""}`;
+      cell.innerHTML = `
+        <button
+          type="button"
+          class="week-class-x"
+          aria-label="${isDisabled ? "Restore" : "Disable"} Meal ${m} on ${dateKey}"
+          title="${isDisabled ? "Restore meal" : "Disable meal for this day"}"
+        >${isDisabled ? "+" : "×"}</button>
+        <span class="week-class-name">Meal ${m}</span>
+        <span class="week-class-time">${escapeHtml(court)}</span>
+      `;
+
+      cell.querySelector(".week-class-x").addEventListener("click", async () => {
+        const nextSet = new Set(getSettings().disabled_meals || []);
+        if (nextSet.has(mealKey)) {
+          nextSet.delete(mealKey);
+          showToast(`Restored Meal ${m} on ${rangeFmt(colDate)}`);
+        } else {
+          nextSet.add(mealKey);
+          showToast(`Disabled Meal ${m} on ${rangeFmt(colDate)}`);
+        }
+        await saveUserSettings({ disabled_meals: Array.from(nextSet) }, { silentToast: true });
+        renderDisableMealsGrid();
+      });
+
+      col.appendChild(cell);
+    }
+
+    frag.appendChild(col);
+  }
+
+  dom.disableMealsGrid.appendChild(frag);
+}
+
 function openSettingsView() {
   populateSettingsUI();
   renderPillarsList();
   renderCancelClassesGrid();
+  renderDisableMealsGrid();
   resetPillarForm();
   dom.settingsView.hidden = false;
 }
@@ -3643,6 +3788,24 @@ function bindEvents() {
   dom.btnCancelWeekLabel.addEventListener("click", () => {
     state.cancelClassesWeekOffset = 0;
     renderCancelClassesGrid();
+  });
+
+  // Settings: Disable Meals by Day Week Navigation
+  dom.btnMealsWeekPrev.addEventListener("click", () => {
+    if (state.disableMealsWeekOffset > -1) {
+      state.disableMealsWeekOffset -= 1;
+      renderDisableMealsGrid();
+    }
+  });
+  dom.btnMealsWeekNext.addEventListener("click", () => {
+    if (state.disableMealsWeekOffset < 20) {
+      state.disableMealsWeekOffset += 1;
+      renderDisableMealsGrid();
+    }
+  });
+  dom.btnMealsWeekLabel.addEventListener("click", () => {
+    state.disableMealsWeekOffset = 0;
+    renderDisableMealsGrid();
   });
 
   // Settings: Instant Google Calendar Sync button

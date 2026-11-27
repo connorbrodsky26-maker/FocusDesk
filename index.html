@@ -36,7 +36,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="./styles.css?v=11" />
+  <link rel="stylesheet" href="./styles.css?v=12" />
 </head>
 <body>
   <!-- =======================================================================
@@ -633,7 +633,45 @@
           </div>
 
           <p class="settings-help-note is-muted">
-            Tap <strong>×</strong> on any class to remove it for that date only (tap <strong>+</strong> to restore). Wake-up times and your Day Plan adjust automatically.
+            Tap <strong>×</strong> on any class to remove it for that date only (tap <strong>+</strong> to restore). Wake-up times, Day Plan, and your 3-week calendar classes adjust automatically.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3C. Disable Meals by Day (Mon-Sun Week Grid, synced with 2/3 Meals selector) -->
+      <section class="settings-card">
+        <button type="button" class="settings-accordion-btn" data-accordion-target="acc-disable-meals" aria-expanded="false">
+          <div class="settings-accordion-copy">
+            <h3>Disable Meals by Day</h3>
+            <p>Turn off individual meals on days off or eating out</p>
+          </div>
+          <svg class="accordion-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div data-accordion-panel="acc-disable-meals" class="settings-accordion-body settings-form-stack" hidden>
+          <div class="week-nav-bar">
+            <button id="btn-meals-week-prev" type="button" class="day-nav-arrow" aria-label="Previous week" title="Previous week">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+            <button id="btn-meals-week-label" type="button" class="week-nav-title" title="Jump to this week">
+              This Week
+            </button>
+            <button id="btn-meals-week-next" type="button" class="day-nav-arrow" aria-label="Next week" title="Next week">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
+
+          <div class="week-grid-scroll">
+            <div id="disable-meals-grid" class="week-schedule-grid week-schedule-grid-7" role="grid" aria-label="Monday to Sunday meals"></div>
+          </div>
+
+          <p class="settings-help-note is-muted">
+            Shows your active <strong>2 Meals</strong> or <strong>3 Meals</strong> setup from the home screen. Tap <strong>×</strong> to skip a meal for that day (tap <strong>+</strong> to restore).
           </p>
         </div>
       </section>
@@ -659,7 +697,7 @@
               Sync to Google Calendar Now
             </button>
             <p class="settings-help-note is-muted">
-              Pushes your 7-day FocusDeck Plan directly to Google Calendar so updates appear on iPhone Calendar &amp; Week Calendar within seconds. Classes stay excluded.
+              Pushes classes 3 weeks ahead and your FocusDeck Plan (tasks, meals, runs, showers, wake/bedtime) 1 week ahead to Google Calendar.
             </p>
           </div>
 
@@ -889,6 +927,6 @@
   <!-- Subtle Toast Notification -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script type="module" src="./app.js?v=11"></script>
+  <script type="module" src="./app.js?v=12"></script>
 </body>
 </html>
