@@ -27,6 +27,7 @@ const STORAGE_KEYS = {
   TASKS: "focusdeck_tasks_v1",
   PILLARS: "focusdeck_pillars_v1",
   USER_SETTINGS: "focusdeck_user_settings_v2",
+  CANCELLED_CLASSES: "focusdeck_cancelled_classes_v1",
   DINING_PREFIX: "focusdeck_dining_v2_",
   USER_EMAIL: "focusdeck_user_email",
   USER_ID: "focusdeck_user_id"
@@ -75,6 +76,7 @@ const state = {
   editingTaskId: null,
   deleteConfirmArmed: false,
   editingPillarId: null,
+  cancelClassesWeekOffset: 0,
   pendingLatePlan: null,
   carouselRafId: null,
   carouselCenteredIndex: 0
@@ -182,6 +184,10 @@ const dom = {
   pillarBufferPills: document.getElementById("pillar-buffer-pills"),
   pillarFormError: document.getElementById("pillar-form-error"),
   btnPillarSubmit: document.getElementById("btn-pillar-submit"),
+  btnCancelWeekPrev: document.getElementById("btn-cancel-week-prev"),
+  btnCancelWeekLabel: document.getElementById("btn-cancel-week-label"),
+  btnCancelWeekNext: document.getElementById("btn-cancel-week-next"),
+  cancelClassesGrid: document.getElementById("cancel-classes-grid"),
   settingsUserEmail: document.getElementById("settings-user-email"),
   btnSyncNow: document.getElementById("btn-sync-now"),
   btnSignOut: document.getElementById("btn-sign-out"),
@@ -448,8 +454,31 @@ function createDefaultUserSettings(userId = null) {
     evening_shower_minutes: 40,
     no_class_wake_time: "08:30",
     runs_per_week: 2,
-    preferred_run_days: [3, 6]
+    preferred_run_days: [3, 6],
+    cancelled_classes: []
   };
+}
+
+function loadLocalCancelledClasses() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.CANCELLED_CLASSES);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function pruneCancelledClasses(list) {
+  if (!Array.isArray(list)) return [];
+  const cutoffKey = toLocalDateKey(addLocalDays(new Date(), -30));
+  const seen = new Set();
+  for (const item of list) {
+    if (typeof item !== "string" || !item.includes("|")) continue;
+    const dateKey = item.split("|")[0];
+    if (dateKey >= cutoffKey) seen.add(item);
+  }
+  return Array.from(seen).sort();
 }
 
 function normalizeUserSettings(row, userId = null) {
@@ -462,6 +491,12 @@ function normalizeUserSettings(row, userId = null) {
   const minSleep = Number.isFinite(Number(src.min_sleep_hours))
     ? Math.max(4, Math.min(prefSleep, Number(src.min_sleep_hours)))
     : Math.min(prefSleep, defaults.min_sleep_hours);
+
+  const cancelledSource = Array.isArray(src.cancelled_classes)
+    ? src.cancelled_classes
+    : Array.isArray(state.userSettings?.cancelled_classes)
+      ? state.userSettings.cancelled_classes
+      : loadLocalCancelledClasses();
 
   return {
     user_id: src.user_id || userId || defaults.user_id,
@@ -487,7 +522,8 @@ function normalizeUserSettings(row, userId = null) {
       : defaults.runs_per_week,
     preferred_run_days: Array.isArray(src.preferred_run_days)
       ? [...new Set(src.preferred_run_days.map(Number).filter((d) => d >= 0 && d <= 6))].sort((a, b) => a - b)
-      : defaults.preferred_run_days
+      : defaults.preferred_run_days,
+    cancelled_classes: pruneCancelledClasses(cancelledSource)
   };
 }
 
@@ -588,7 +624,9 @@ function savePillarsToCache() {
 
 function saveUserSettingsToCache() {
   try {
-    localStorage.setItem(STORAGE_KEYS.USER_SETTINGS, JSON.stringify(getSettings()));
+    const s = getSettings();
+    localStorage.setItem(STORAGE_KEYS.USER_SETTINGS, JSON.stringify(s));
+    localStorage.setItem(STORAGE_KEYS.CANCELLED_CLASSES, JSON.stringify(s.cancelled_classes || []));
   } catch (_) {}
 }
 
@@ -616,6 +654,7 @@ function clearAllCache() {
     localStorage.removeItem(STORAGE_KEYS.TASKS);
     localStorage.removeItem(STORAGE_KEYS.PILLARS);
     localStorage.removeItem(STORAGE_KEYS.USER_SETTINGS);
+    localStorage.removeItem(STORAGE_KEYS.CANCELLED_CLASSES);
     localStorage.removeItem(STORAGE_KEYS.USER_EMAIL);
     localStorage.removeItem(STORAGE_KEYS.USER_ID);
   } catch (_) {}
@@ -858,9 +897,15 @@ async function saveUserSettings(patch, { silentToast = false } = {}) {
   }
 
   if (state.user) {
-    await runSupabaseWrite(() =>
-      supabase.from("user_settings").upsert(next, { onConflict: "user_id" })
-    );
+    await runSupabaseWrite(async () => {
+      const res = await supabase.from("user_settings").upsert(next, { onConflict: "user_id" });
+      if (res.error && String(res.error.message || "").toLowerCase().includes("cancelled_classes")) {
+        // Fallback gracefully if cancelled_classes column has not been added to Supabase yet
+        const { cancelled_classes: _ignored, ...baseSettings } = next;
+        return await supabase.from("user_settings").upsert(baseSettings, { onConflict: "user_id" });
+      }
+      return res;
+    });
   }
 
   if (!silentToast) {
@@ -1081,16 +1126,27 @@ async function syncFromSupabase(showFeedback = false) {
 // V1 SMART SORTING & BETWEEN-CLASS "GAP-FIT OVERRIDE" ENGINE
 // Note: is_starred is strictly visual and NEVER influences task ordering.
 // ============================================================================
+function getActiveClassesForDate(dayDate, pillars = state.pillars, settings = getSettings()) {
+  const dow = dayDate.getDay();
+  const dateKey = toLocalDateKey(dayDate);
+  const cancelledSet = new Set(Array.isArray(settings?.cancelled_classes) ? settings.cancelled_classes : []);
+  return (pillars || [])
+    .filter(
+      (p) =>
+        Array.isArray(p.days_of_week) &&
+        p.days_of_week.includes(dow) &&
+        !cancelledSet.has(`${dateKey}|${p.id}`)
+    )
+    .slice()
+    .sort((a, b) => parseHHMM(a.start_time) - parseHHMM(b.start_time));
+}
+
 function getActiveGapContext(pillars, now = new Date(), tasks = state.tasks) {
-  const todayDow = now.getDay(); // 0=Sun ... 6=Sat
   const todayKey = toLocalDateKey(now);
   const nowExactMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
 
   const upcoming = [];
-  for (const pillar of pillars) {
-    if (!Array.isArray(pillar.days_of_week) || !pillar.days_of_week.includes(todayDow)) {
-      continue;
-    }
+  for (const pillar of getActiveClassesForDate(now, pillars, getSettings())) {
     const startMin = parseHHMM(pillar.start_time);
     const buffer = Number.isFinite(pillar.walk_buffer_minutes) ? pillar.walk_buffer_minutes : 15;
     const walkOutMin = startMin - buffer;
@@ -1285,12 +1341,8 @@ function computeFocusState(now = new Date()) {
 // V2 DYNAMIC WAKE-UP, SHOWERS, SLEEP, MEALS, RUNS & 7-DAY AUTO-PLANNER
 // ============================================================================
 function computeDynamicWakeInfo(dayDate, pillars, settings) {
-  const dow = dayDate.getDay();
   const latestWakeMin = parseHHMM(settings.no_class_wake_time || "08:30");
-  const dayClasses = pillars
-    .filter((p) => Array.isArray(p.days_of_week) && p.days_of_week.includes(dow))
-    .slice()
-    .sort((a, b) => parseHHMM(a.start_time) - parseHHMM(b.start_time));
+  const dayClasses = getActiveClassesForDate(dayDate, pillars, settings);
 
   if (dayClasses.length === 0) {
     return {
@@ -1461,8 +1513,7 @@ function selectRunDaysForWeek(todayDate, pillars, tasks, settings) {
     const key = toLocalDateKey(d);
     const dow = d.getDay();
 
-    const classMins = pillars
-      .filter((p) => Array.isArray(p.days_of_week) && p.days_of_week.includes(dow))
+    const classMins = getActiveClassesForDate(d, pillars, settings)
       .reduce((acc, p) => acc + Math.max(0, parseHHMM(p.end_time) - parseHHMM(p.start_time) + (p.walk_buffer_minutes || 15)), 0);
 
     const taskMins = activeTasks
@@ -1957,8 +2008,7 @@ function computeFreeMinutesBetween(startDate, endDate, pillars) {
       const dow = cursorDay.getDay();
 
       const blocks = [];
-      for (const p of pillars) {
-        if (!Array.isArray(p.days_of_week) || !p.days_of_week.includes(dow)) continue;
+      for (const p of getActiveClassesForDate(cursorDay, pillars, getSettings())) {
         const buffer = Number.isFinite(p.walk_buffer_minutes) ? p.walk_buffer_minutes : 15;
         const bStart = Math.max(segStartMin, parseHHMM(p.start_time) - buffer);
         const bEnd = Math.min(segEndMin, parseHHMM(p.end_time));
@@ -2784,6 +2834,7 @@ function recomputePlanAndRender({ animateEnter = false, scheduleSync = false, ch
   }
   if (!dom.settingsView.hidden) {
     renderPillarsList();
+    renderCancelClassesGrid();
   }
 
   if (scheduleSync) {
@@ -3221,9 +3272,109 @@ function renderPillarsList() {
   }
 }
 
+function getMondayOfWeek(baseDate, weekOffset = 0) {
+  const dow = baseDate.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+  // On Sat/Sun, default week 0 to the upcoming Mon-Fri week; on Mon-Fri show current Mon-Fri week
+  const daysToMonday = dow === 0 ? 1 : dow === 6 ? 2 : -(dow - 1);
+  return addLocalDays(baseDate, daysToMonday + weekOffset * 7);
+}
+
+function renderCancelClassesGrid() {
+  if (!dom.cancelClassesGrid) return;
+  const now = new Date();
+  const todayKey = toLocalDateKey(now);
+  const monday = getMondayOfWeek(now, state.cancelClassesWeekOffset);
+  const friday = addLocalDays(monday, 4);
+
+  const rangeFmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const weekTag =
+    state.cancelClassesWeekOffset === 0
+      ? " · This Week"
+      : state.cancelClassesWeekOffset === 1
+        ? " · Next Week"
+        : state.cancelClassesWeekOffset > 1
+          ? ` · +${state.cancelClassesWeekOffset} wks`
+          : ` · ${state.cancelClassesWeekOffset} wk`;
+  dom.btnCancelWeekLabel.textContent = `${rangeFmt(monday)} – ${rangeFmt(friday)}${weekTag}`;
+  dom.btnCancelWeekPrev.disabled = state.cancelClassesWeekOffset <= -1;
+  dom.btnCancelWeekNext.disabled = state.cancelClassesWeekOffset >= 20;
+
+  const cancelledSet = new Set(getSettings().cancelled_classes || []);
+  const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+  dom.cancelClassesGrid.innerHTML = "";
+  const frag = document.createDocumentFragment();
+
+  for (let i = 0; i < 5; i++) {
+    const colDate = addLocalDays(monday, i);
+    const dateKey = toLocalDateKey(colDate);
+    const dow = i + 1; // 1=Mon .. 5=Fri
+    const isToday = dateKey === todayKey;
+
+    const col = document.createElement("div");
+    col.className = `week-day-col ${isToday ? "is-today" : ""}`;
+    col.innerHTML = `
+      <div class="week-day-head">
+        <span class="week-day-name">${weekdayNames[i]}</span>
+        <span class="week-day-num">${colDate.getDate()}</span>
+      </div>
+    `;
+
+    const dayClasses = state.pillars
+      .filter((p) => Array.isArray(p.days_of_week) && p.days_of_week.includes(dow))
+      .slice()
+      .sort((a, b) => parseHHMM(a.start_time) - parseHHMM(b.start_time));
+
+    if (dayClasses.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "week-day-empty";
+      empty.textContent = "—";
+      col.appendChild(empty);
+    } else {
+      for (const pillar of dayClasses) {
+        const cancelKey = `${dateKey}|${pillar.id}`;
+        const isCancelled = cancelledSet.has(cancelKey);
+
+        const cell = document.createElement("div");
+        cell.className = `week-class-cell ${isCancelled ? "is-cancelled" : ""}`;
+        cell.innerHTML = `
+          <button
+            type="button"
+            class="week-class-x"
+            aria-label="${isCancelled ? "Restore" : "Cancel"} ${escapeHtml(pillar.name)} on ${dateKey}"
+            title="${isCancelled ? "Restore class" : "Cancel class for this day"}"
+          >${isCancelled ? "+" : "×"}</button>
+          <span class="week-class-name">${escapeHtml(pillar.name)}</span>
+          <span class="week-class-time">${formatHHMM12h(pillar.start_time)}</span>
+        `;
+
+        cell.querySelector(".week-class-x").addEventListener("click", async () => {
+          const nextSet = new Set(getSettings().cancelled_classes || []);
+          if (nextSet.has(cancelKey)) {
+            nextSet.delete(cancelKey);
+            showToast(`Restored ${pillar.name} on ${rangeFmt(colDate)}`);
+          } else {
+            nextSet.add(cancelKey);
+            showToast(`Removed ${pillar.name} on ${rangeFmt(colDate)}`);
+          }
+          await saveUserSettings({ cancelled_classes: Array.from(nextSet) }, { silentToast: true });
+          renderCancelClassesGrid();
+        });
+
+        col.appendChild(cell);
+      }
+    }
+
+    frag.appendChild(col);
+  }
+
+  dom.cancelClassesGrid.appendChild(frag);
+}
+
 function openSettingsView() {
   populateSettingsUI();
   renderPillarsList();
+  renderCancelClassesGrid();
   resetPillarForm();
   dom.settingsView.hidden = false;
 }
@@ -3475,6 +3626,24 @@ function bindEvents() {
   dom.btnSettingsClose.addEventListener("click", closeSettingsView);
   dom.btnPillarCancel.addEventListener("click", resetPillarForm);
   dom.btnSyncNow.addEventListener("click", () => syncFromSupabase(true));
+
+  // Settings: Cancel Classes by Day Week Navigation
+  dom.btnCancelWeekPrev.addEventListener("click", () => {
+    if (state.cancelClassesWeekOffset > -1) {
+      state.cancelClassesWeekOffset -= 1;
+      renderCancelClassesGrid();
+    }
+  });
+  dom.btnCancelWeekNext.addEventListener("click", () => {
+    if (state.cancelClassesWeekOffset < 20) {
+      state.cancelClassesWeekOffset += 1;
+      renderCancelClassesGrid();
+    }
+  });
+  dom.btnCancelWeekLabel.addEventListener("click", () => {
+    state.cancelClassesWeekOffset = 0;
+    renderCancelClassesGrid();
+  });
 
   // Settings: Instant Google Calendar Sync button
   dom.btnGcalSyncNow.addEventListener("click", async () => {
