@@ -34,6 +34,12 @@
   --meal-bg: #FDF3E7;
   --meal-border: #E9C79B;
   --meal-accent: #9A581E;
+  --run-bg: #FDEEE9;
+  --run-border: #EAC0B2;
+  --run-accent: #B4482A;
+  --shower-bg: #E8F4F8;
+  --shower-border: #B9DCE8;
+  --shower-accent: #276B82;
   --sage-bg: #EAF4EE;
   --sage-border: #C4DFCE;
   --sage-accent: #3D6E55;
@@ -1404,34 +1410,45 @@ html[data-boot="app"] #auth-view {
   color: var(--meal-accent);
 }
 
-/* 3. Runs & Showers (Calm Sage Green) */
-.plan-card-run,
-.plan-card-shower {
-  background: var(--sage-bg);
-  border-color: var(--sage-border);
+/* 3. Runs (Warm Terracotta / Coral) */
+.plan-card-run {
+  background: var(--run-bg);
+  border-color: var(--run-border);
+  border-left: 4px solid var(--run-accent);
 }
 .plan-card-run .plan-card-time,
-.plan-card-run .plan-card-title,
-.plan-card-shower .plan-card-time,
-.plan-card-shower .plan-card-title {
-  color: var(--sage-accent);
+.plan-card-run .plan-card-title {
+  color: var(--run-accent);
 }
-.plan-card-run .plan-card-meta,
-.plan-card-shower .plan-card-meta {
-  color: #466957;
+.plan-card-run .plan-card-meta {
+  color: #8C4835;
 }
 .plan-move-run-btn {
   padding: 4px 10px;
   border-radius: var(--radius-pill);
   background: #FFFFFF;
-  border: 1px solid var(--sage-border);
-  color: var(--sage-accent);
+  border: 1px solid var(--run-border);
+  color: var(--run-accent);
   font-size: 0.74rem;
   font-weight: 700;
   white-space: nowrap;
 }
 .plan-move-run-btn:hover {
-  background: #DCEEE3;
+  background: #F9DFD6;
+}
+
+/* 3B. All Showers (Calm Ocean Teal — Post-Class, Post-Run, & Evening) */
+.plan-card-shower {
+  background: var(--shower-bg);
+  border-color: var(--shower-border);
+  border-left: 4px solid var(--shower-accent);
+}
+.plan-card-shower .plan-card-time,
+.plan-card-shower .plan-card-title {
+  color: var(--shower-accent);
+}
+.plan-card-shower .plan-card-meta {
+  color: #3E6C7D;
 }
 
 /* 4. Academic Tasks (Signature #5D71BF Blue) */

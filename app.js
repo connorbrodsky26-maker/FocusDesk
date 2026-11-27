@@ -1719,25 +1719,41 @@ function computeSevenDayPlan(now = new Date(), { tasks = state.tasks, pillars = 
       }
     }
 
-    // 4. Protected 130m Run Block (10m Prep -> 60m Run -> 60m Cooldown & Shower)
+    // 4. Protected 130m Run Block split into actual 60m Run (+10m prep buffer before) & separate 60m Post-Run Shower
     let hasRun = false;
     if (offset >= 0 && runDayOffsets.has(offset)) {
       const runSlot = findRunSlot(effectiveStart, preferredStudyEndMin, busyForFixed);
       if (runSlot) {
         hasRun = true;
+        const runStartMin = runSlot.start + 10; // 10m Run Prep buffer protected right before
+        const runEndMin = runStartMin + 60;     // 60m actual running time
+        const showerEndMin = runEndMin + 60;    // 60m separate post-run shower & cooldown
+
         blocks.push({
           eventType: "run",
           dayOffset: offset,
-          title: "1-Hour Run Block",
-          icsTitle: "1-Hour Run (Prep + Run + Cooldown & Shower)",
+          title: "Run",
+          icsTitle: "Run",
           location: "",
-          notes: "10m Run Prep → 60m Run → 60m Post-Run Cooldown & Shower (130m protected block).",
-          startMin: runSlot.start,
-          endMin: runSlot.end,
-          meta: "10m Prep → 60m Run → 60m Cooldown & Shower"
+          notes: "60m Run (10m prep buffer reserved right before).",
+          startMin: runStartMin,
+          endMin: runEndMin,
+          meta: "60m run · 10m prep buffer before"
         });
+
+        blocks.push({
+          eventType: "shower",
+          title: "Post-Run Shower & Cooldown",
+          icsTitle: "Post-Run Shower & Cooldown",
+          location: "",
+          notes: "60m post-run cooldown & shower.",
+          startMin: runEndMin,
+          endMin: showerEndMin,
+          meta: "60m post-run cooldown & shower"
+        });
+
         busyForFixed.push([runSlot.start, runSlot.end]);
-        busyForStudy.push([runSlot.start, runSlot.end + 15]); // 15m breathing gap after run
+        busyForStudy.push([runSlot.start, runSlot.end + 15]); // 15m breathing gap after cooldown
       }
     }
 
